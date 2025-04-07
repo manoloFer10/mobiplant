@@ -1,73 +1,3 @@
-# import pandas as pd
-# import re
-# import requests
-# import time
-# from tqdm import tqdm
-
-# # Load data
-# file_path = 'data\mcq_results_all_shuffles.csv'
-# data = pd.read_csv(file_path)
-
-# session = requests.Session()
-# session.headers.update({
-#     'User-Agent': 'get-dois/1.0'
-# })
-
-# def extract_doi(link):
-#     doi_pattern = r'(?i)\b(?:doi\s*[:]?\s*)?(10[.]\d+\/[^\s&]*)'
-#     match = re.search(doi_pattern, link)
-#     cleaned_doi = None
-#     if match:
-#         cleaned_doi = re.sub(r'[^\w./-]+$', '', match.group(1)).strip()
-#     return cleaned_doi
-
-# # Function to query CrossRef API
-# def query_crossref(doi):
-#     base_url = f"https://api.crossref.org/works/{doi}"
-#     try:
-#         response = session.get(base_url, timeout=10)
-#         if response.status_code == 200:
-#             data = response.json().get('message', {})
-#             year = data.get('issued', {}).get('date-parts', [[None]])[0][0]
-#             citations = data.get('is-referenced-by-count', 0)
-#             return year, citations
-#         else:
-#             return None, None
-#     except Exception as e:
-#         print(f"Error querying DOI {doi}: {e}")
-#         return None, None
-
-# # Process data with progress bar
-# results = []
-# for index, row in tqdm(data.iterrows(), total=data.shape[0]):
-#     link = row['source']
-#     doi = extract_doi(link)
-#     if doi:
-#         for doi in doi:
-#             year, citations = query_crossref(doi)
-#             results.append({
-#                 'Original Source': link,
-#                 'DOI': doi,
-#                 'Year': year,
-#                 'Citations': citations
-#             })
-#             time.sleep(0.1)  # Be polite with a small delay
-#     else:
-#         results.append({
-#             'Original Source': link,
-#             'DOI': None,
-#             'Year': None,
-#             'Citations': None
-#         })
-
-# # Save results to CSV
-# output_path = 'data/paper_data.csv'
-# results_df = pd.DataFrame(results)
-# results_df.to_csv(output_path, index=False)
-
-# print(f"Processed data saved to {output_path}")
-
-
 import pandas as pd
 import re
 import requests
@@ -82,7 +12,7 @@ def extract_doi(link):
         if doi.endswith('.') or doi.endswith(';'):
             doi = doi[:-1]
         dois.append(doi)
-    return dois  # Returns an empty list if no DOIs are found
+    return dois  
 
 # Function to query CrossRef API
 def query_crossref(doi):
@@ -104,7 +34,6 @@ def query_crossref(doi):
 def query_metadata(data):
     output_path = 'data/doi/processed_paper_data.json'
     
-    # Define processing function for each row
     def process_row(row):
         link = row['source']
         dois = extract_doi(link)
@@ -129,14 +58,11 @@ def query_metadata(data):
             print(f'DOI could not be extracted for {link}')
         return metadata
         
-    # Apply with progress bar
     tqdm.pandas(desc="Adding metadata")
     new_columns = data.progress_apply(process_row, axis=1)
     
-    # Merge new columns with original DataFrame
     data = pd.concat([data, new_columns], axis=1)
-    
-    # Save updated DataFrame
+
     data.to_json(output_path, orient='records', indent=2)
     print(f"Processed data saved to {output_path}") 
 
@@ -145,7 +71,7 @@ def extractable(data):
     tqdm.pandas(desc="Extracting DOIs")
     data['doi'] = data['source'].progress_apply(lambda x: extract_doi(x) or None)
     
-    # Save results to CSV
+    # Save results
     output_path = 'data/doi/extractable_dois.json'
     data.to_json(output_path, index=False, orient='records', indent=2)
     

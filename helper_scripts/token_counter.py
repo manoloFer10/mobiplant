@@ -23,7 +23,6 @@ def count_tokens(text, model="gpt-4o"):
         print(f"Error: {e}")
         return None
 
-# Example usage
 if __name__ == "__main__":
     tokens = 0
     answer_tokens = 0

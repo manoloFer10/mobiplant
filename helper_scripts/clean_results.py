@@ -21,10 +21,8 @@ def clean_dataset(df):
     model_columns = [col for col in df.columns if col.startswith('CoT_election_by_')]
     for col in model_columns:
         df[col] = df[col].apply(to_int)
-        # Convert to numeric, coercing errors to NaN
         df[col] = pd.to_numeric(df[col], errors='coerce')
-        # Convert to integer (NaN remains NaN)
-        df[col] = df[col].astype(pd.Int64Dtype())  # Allows integer NaN
+        df[col] = df[col].astype(pd.Int64Dtype()) 
 
     return df
 
