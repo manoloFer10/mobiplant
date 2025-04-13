@@ -18,7 +18,7 @@ def perform_metrics(df_dataset, output_folder):
     os.makedirs(output_folder, exist_ok=True)
 
     model_columns = [col for col in df_dataset.columns if col.startswith('CoT_election_by_')]
-    model_names = [col.replace('election_by_', '') for col in model_columns]
+    model_names = [col.replace('CoT_election_by_', '') for col in model_columns]
     df_dataset.rename(columns=dict(zip(model_columns, model_names)), inplace=True)
 
     # Preprocess model columns: convert to numeric and then to integers, invalid -> NaN
@@ -242,13 +242,11 @@ def create_answer_distribution_csv(df_dataset, model_names, output_folder):
     
     # Create an ordered list of output column names.
     output_columns = []
-    for suffix in run_suffixes:
-        for letter in letters:
-            # The column name format: e.g., "A_first", "B_first", etc.
-            output_columns.append(f"{letter}{suffix}")
+    for letter in letters:
+        output_columns.append(f"{letter}")
     
     # Helper: Compute distribution counts for a series.
-    def compute_counts(series, suffix):
+    def compute_counts(series):
         # Initialize counts for each expected option.
         counts = {letter: 0 for letter in letters}
         for x in series:
@@ -256,12 +254,13 @@ def create_answer_distribution_csv(df_dataset, model_names, output_folder):
                 # Try to interpret the value as an integer.
                 val = int(x)
             except (ValueError, TypeError):
+                print(f'error with: {x}')
                 val = None
             # Map the value to a letter if possible, otherwise "Format Error".
             letter = mapping.get(val, "Format Error")
             counts[letter] += 1
         # Create a dict with keys matching the output columns for this run.
-        return {f"{letter}{suffix}": counts[letter] for letter in letters}
+        return {f"{letter}": counts[letter] for letter in letters}
     
     # Prepare a dictionary to collect row data.
     # Each key is a row label ("Ground Truth" or a model base name)
@@ -273,23 +272,23 @@ def create_answer_distribution_csv(df_dataset, model_names, output_folder):
     for suffix in run_suffixes:
         answer_col = 'answer' + suffix
         if answer_col in df_dataset.columns:
-            gt_counts.update(compute_counts(df_dataset[answer_col], suffix))
+            gt_counts.update(compute_counts(df_dataset[answer_col]))
         else:
             # If the answer column is missing, mark counts as "N/A".
             for letter in letters:
-                gt_counts[f"{letter}{suffix}"] = "N/A"
-    distribution_results["Ground Truth"] = gt_counts
+                gt_counts[f"{letter}"] = "N/A"
+        distribution_results[f"ground_truth{suffix}"] = gt_counts
     
     # Process each model prediction: each base model uses columns like base+suffix.
     for base in model_names:
         model_counts = {}
-        for suffix in run_suffixes:
-            model_col = base + suffix
-            if model_col in df_dataset.columns:
-                model_counts.update(compute_counts(df_dataset[model_col], suffix))
-            else:
-                for letter in letters:
-                    model_counts[f"{letter}{suffix}"] = "N/A"
+        model_col = base 
+        suffix = model_col.split('_')[-1]
+        if model_col in df_dataset.columns:
+            model_counts.update(compute_counts(df_dataset[model_col]))
+        else:
+            for letter in letters:
+                model_counts[f"{letter}"] = "N/A"
         distribution_results[base] = model_counts
     
     # Create a DataFrame with rows as distribution_results and ensure column order.
