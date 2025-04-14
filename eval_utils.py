@@ -2,6 +2,11 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
+from matplotlib.lines import Line2D
+from matplotlib import patheffects
+from matplotlib.collections import LineCollection
+
 
 EVALUATION_STYLES = ['complete', 'automatic-metrics', 'human-metrics', 'statistics', 'experiments', 'automatic-plotting', 'human-plotting']
 
@@ -17,8 +22,27 @@ def perform_metrics(df_dataset, output_folder):
     output_folder = output_folder / 'metrics'
     os.makedirs(output_folder, exist_ok=True)
 
+    model_names_mapping = {
+        'llama': 'LLaMA',
+        'gemini': 'Gemini',
+        'claude': 'Claude',
+        'chatgpt': 'ChatGPT',
+        'o1-mini': 'O1-Mini',
+        'v3': 'DeepSeek V3',
+        'r1': 'DeepSeek R1'
+    }
+
     model_columns = [col for col in df_dataset.columns if col.startswith('CoT_election_by_')]
     model_names = [col.replace('CoT_election_by_', '') for col in model_columns]
+
+    clean_names = []
+    for model in model_names:
+        suffix = model.split('_')[1]
+        name = model.split('_')[0]
+        clean_name = f'{model_names_mapping[name]}_{suffix}'
+        clean_names.append(clean_name)
+    model_names = clean_names
+
     df_dataset.rename(columns=dict(zip(model_columns, model_names)), inplace=True)
 
     # Preprocess model columns: convert to numeric and then to integers, invalid -> NaN
@@ -49,11 +73,11 @@ def perform_metrics(df_dataset, output_folder):
     #     accuracies.to_csv(output_file)
 
     # Add Year and Citation binning
-    df_dataset = create_year_bins(df_dataset)
-    group_by_and_score(df_dataset, 'year_bin', model_names, output_folder)
+    df_dataset_year_binned = create_year_bins(df_dataset)
+    group_by_and_score(df_dataset_year_binned, 'year_bin', model_names, output_folder)
     
-    df_dataset = create_citation_bins(df_dataset)
-    group_by_and_score(df_dataset, 'citation_bin', model_names, output_folder)
+    df_dataset_citation_binned = create_citation_bins(df_dataset)
+    group_by_and_score(df_dataset_citation_binned, 'citation_bin', model_names, output_folder)
 
     create_answer_distribution_csv(df_dataset, model_names, output_folder / 'answer_distribution')
         
@@ -226,15 +250,14 @@ def create_answer_distribution_csv(df_dataset, model_names, output_folder):
     
     The CSV is structured such that:
       - Rows: "Ground Truth" (from the corresponding answer columns) and each model (base name).
-      - Columns: For each run, separate columns for each option. For example, for the first run:
-          A_first, B_first, C_first, Format Error_first
-        and similarly for _second and _third.
+      - Columns: separate columns for each option.
     
     Parameters:
       df_dataset (pd.DataFrame): The dataset containing the answer and model prediction columns.
       model_names (list of str): List of base model names (without run suffixes).
       output_folder (str): Folder path where the CSV file will be saved.
     """
+    print(df_dataset)
     # Define run suffixes and the expected letter mapping.
     run_suffixes = ['_first', '_second', '_third']
     letters = ["A", "B", "C", "Format Error"]
@@ -254,7 +277,6 @@ def create_answer_distribution_csv(df_dataset, model_names, output_folder):
                 # Try to interpret the value as an integer.
                 val = int(x)
             except (ValueError, TypeError):
-                print(f'error with: {x}')
                 val = None
             # Map the value to a letter if possible, otherwise "Format Error".
             letter = mapping.get(val, "Format Error")
@@ -268,8 +290,8 @@ def create_answer_distribution_csv(df_dataset, model_names, output_folder):
     distribution_results = {}
     
     # Process Ground Truth: use the answer columns.
-    gt_counts = {}
     for suffix in run_suffixes:
+        gt_counts = {}
         answer_col = 'answer' + suffix
         if answer_col in df_dataset.columns:
             gt_counts.update(compute_counts(df_dataset[answer_col]))
@@ -468,6 +490,7 @@ def perform_descriptive_statistics(df_dataset, output_folder):
 
     print(f"Overall statistics saved to folder: {output_folder}")
 
+
 def calculate_distribution(df, column_name):
     """Calculate the distribution and proportion of answers in a given column."""
     distribution = df[column_name].value_counts().reset_index()
@@ -486,13 +509,27 @@ def perform_automatic_plots(df_dataset, output_folder):
     output_folder = output_folder / 'plots'
     os.makedirs(output_folder, exist_ok=True)
 
-    #Spider graph; model accuracy by lang
+    MODEL_COLORS  = {
+        'LLaMA': '#8B4513',
+        'Gemini': '#4285F4',
+        'Claude': '#FF6C0A',
+        'ChatGPT': '#10A37F',
+        'O1-Mini': '#8FB339',
+        'DeepSeek V3': '#0B5E99',
+        'DeepSeek R1': '#003366'
+    }
+
     if os.path.exists(origin_folder / 'metrics'):
         origin_folder = origin_folder / 'metrics'
+        #generate_overall_spidergraph(origin_folder / 'normalized_area' / 'answer_accuracy.csv', 'area', output_folder )
         plot_citation_bin_accuracy(origin_folder / 'citation_bin' / 'answer_accuracy.csv', output_folder)
         
         bin_df = create_year_bins(df_dataset)
         plot_year_accuracy(origin_folder / 'year_bin' / 'answer_accuracy.csv', bin_df['year_bin'].value_counts(), output_folder)
+
+        plot_lollipop_chart(origin_folder / 'normalized_area' / 'all_results.csv', MODEL_COLORS, output_folder)
+
+        plot_bump_chart(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
     else:
         print('No metrics results folder detected... passing to statistics plots.')
 
@@ -504,6 +541,7 @@ def plot_citation_bin_accuracy(data_path, output_folder):
     
     # Exclude the 'Overall' row and sort bins logically
     df = df.drop('Overall', errors='ignore')
+    df = df.drop('count', axis=1)
     bin_order = ['0', '1-10', '11-100', '101-500', '501-1000', '1001-1702']
     df = df.reindex(bin_order)
     
@@ -536,10 +574,12 @@ def plot_citation_bin_accuracy(data_path, output_folder):
     plt.savefig(output_folder / 'citations.png', format='png', dpi=300, bbox_inches='tight')
     plt.close()
 
+
 def plot_year_accuracy(data_path, sample_counts, output_folder):
     # Read and prepare data
     df = pd.read_csv(data_path, index_col=0)
     df = df.drop('Overall', errors='ignore')
+    df = df.drop('count', axis=1)
     
     sorted_bins = sorted(df.index, key=lambda x: int(x.split('-')[0]))
     df = df.loc[sorted_bins]
@@ -591,58 +631,157 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
     plt.close()
 
 
-def generate_overall_spidergraph(data_path: str, output_folder: str):
-    # Read the CSV file with overall metrics (index column is assumed to contain group names)
+def plot_lollipop_chart(data_path: str, model_colors: dict, output_folder: Path):
+    # Load and process data
     df = pd.read_csv(data_path, index_col=0)
+    overall_row = df.loc['Overall']
     
-    # Select only the overall metrics row
-    if 'Overall' not in df.index:
-        raise ValueError("Overall metrics row not found in the data.")
-    overall = df.loc['Overall']
+    # Extract models and metrics
+    models = []
+    means = []
+    stds = []
     
-    # Pick the columns corresponding to total accuracy for each model
-    # They are assumed to have the suffix '_answer_accuracy'
-    accuracy_cols = [col for col in overall.index if col.endswith('_answer_accuracy')]
-    # Extract the model names by removing the suffix
-    model_names = [col.replace('_answer_accuracy', '') for col in accuracy_cols]
-    # Retrieve overall accuracies (as numbers)
-    overall_values = [overall[col] for col in accuracy_cols]
+    for col in df.columns:
+        if '_answer_accuracy_mean' in col:
+            model = col.split('_')[0]  # Extract model name
+            models.append(model)
+            means.append(overall_row[col])
+            std_col = col.replace('_mean', '_std')
+            stds.append(overall_row[std_col])
     
-    # Prepare the angles for each axis on the spider chart
-    num_models = len(model_names)
-    angles = np.linspace(0, 2 * np.pi, num_models, endpoint=False).tolist()
-    angles += angles[:1]  # Complete the loop
+    # Create dataframe and sort
+    data = pd.DataFrame({'Model': models, 'Accuracy': means, 'Std': stds})
+    data = data.sort_values('Accuracy', ascending=True)
     
-    # Prepare values in the same order and complete the loop for the radar plot
-    values = overall_values[:]
-    values += values[:1]
+    # Create plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.set_facecolor('#f5f5f5')
+    fig.patch.set_facecolor('white')
     
-    # Create the spider (radar) chart
-    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': 'polar'})
-    ax.set_theta_offset(np.pi / 2)
-    ax.set_theta_direction(-1)
+    # Plot horizontal lollipops
+    for i, (acc, model, std) in enumerate(zip(data['Accuracy'], data['Model'], data['Std'])):
+        color = model_colors.get(model, '#333333')  # Default to dark gray if unknown
+        
+        # Horizontal line with subtle gradient
+        ax.hlines(y=i, xmin=0, xmax=acc, color=color, 
+                alpha=0.9, linewidth=4, linestyle='-')
+        
+        # Custom marker with white border
+        ax.scatter(acc, i, s=200, color=color, edgecolor='white',
+                 linewidth=1.5, marker='o', zorder=10)
+        
+        # Smart label placement
+        label_x = acc + 2  # Offset from marker
+        ha = 'left' if (100 - acc) > 10 else 'right'  # Flip if near edge
+        if ha == 'right':
+            label_x = acc - 2  # Left offset for edge cases
+            
+        ax.text(label_x, i, 
+               f'{acc:.1f}% ±{std:.1f}',
+               va='center', ha=ha, 
+               fontsize=10, weight='bold',
+               color=color,
+               path_effects=[patheffects.withStroke(linewidth=2, foreground='white')])
     
-    # Set radial limits and labels
-    ax.set_rlim(0, 100)
-    ax.set_rticks([0, 20, 40, 60, 80, 100])
-    ax.set_yticklabels(['0%', '20%', '40%', '60%', '80%', '100%'], fontsize=10, color='grey')
+    # Customize plot
+    ax.set_yticks(range(len(data)))
+    ax.set_yticklabels(data['Model'], ha='right', va='center',
+                      fontsize=11, weight='semibold')
+    ax.set_xlabel('Accuracy (%)', fontsize=12, labelpad=15, weight='semibold')
+    ax.set_title('Global Model Performance in APOLO Benchmark', 
+               pad=20, fontsize=14, weight='bold')
+    ax.set_xlim(0, 100)
+    ax.xaxis.set_major_locator(plt.MultipleLocator(10))
+    ax.grid(axis='x', linestyle='--', alpha=0.7)
     
-    # Set the model names as labels on the outer circle
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(model_names, fontsize=14, color='black')
-    ax.grid(color='grey', linestyle='--', linewidth=0.5)
+    # Clean frame
+    for spine in ['top', 'right', 'left']:
+        ax.spines[spine].set_visible(False)
     
-    # Choose a color (or use a colormap if desired)
-    color = plt.cm.tab10.colors[0]
-    ax.plot(angles, values, color=color, linewidth=2, marker='o', markersize=4, label='Overall Accuracy')
-    ax.fill(angles, values, color=color, alpha=0.2)
-    
-    # Add legend and save the plot
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), fontsize=14, frameon=False)
     plt.tight_layout()
+    output_path_svg = output_folder / "lollipop_general_performance.svg"
+    plt.savefig(output_path_svg, format='svg', bbox_inches="tight")
+    output_path_png = output_folder / "lollipop_general_performance.png"
+    plt.savefig(output_path_png, format='png', bbox_inches="tight")
+    plt.close()
+
+    print(f"Lollipop chart saved to: {output_path_svg}")
+
+
+def plot_bump_chart(data_path: str, model_colors: dict, output_folder: Path):
+    """Generate bump chart for performance by domain with custom styling"""
+
+    # Load and process data
+    df = pd.read_csv(data_path).dropna()
+    df = df[df.iloc[:, 0] != 'Overall']  # Remove overall row
+    areas = df.iloc[:, 0].values
+    model_cols = [col for col in df.columns if '_answer_accuracy' in col]
+    models = [col.split('_')[0] for col in model_cols]
     
-    output_path = os.path.join(output_folder, "overall_accuracy_spider.png")
-    plt.savefig(output_path, bbox_inches='tight')
+    # Prepare ranking data
+    rank_data = []
+    for _, row in df.iterrows():
+        scores = {model: row[col] for model, col in zip(models, model_cols)}
+        sorted_models = sorted(scores.items(), key=lambda x: -x[1])
+        ranks = {model: i+1 for i, (model, _) in enumerate(sorted_models)}
+        rank_data.append(ranks)
+    
+    ranks_df = pd.DataFrame(rank_data, index=areas)
+    
+    # Create plot
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.set_facecolor('#f5f5f5')
+    fig.patch.set_facecolor('white')
+    
+    # Plot lines with custom styling
+    for model in models:
+        model_ranks = ranks_df[model].values
+        x = np.arange(len(areas))
+        y = model_ranks
+        
+        # Create line segments with model color
+        color = model_colors.get(model, '#777777')  # Gray for unknown models
+        points = np.array([x, y]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+        
+        lc = LineCollection(segments, 
+                          colors=[color]*(len(segments)),  # Solid color
+                          linewidth=2.5,
+                          alpha=0.9,
+                          zorder=2)
+        ax.add_collection(lc)
+        
+        # Add styled markers
+        ax.scatter(x, y, s=120, color=color,
+                 edgecolor='white', linewidth=1.2,
+                 marker='o', zorder=3, label=model)
+    
+    # Customize axis
+    ax.invert_yaxis()
+    ax.set_xticks(np.arange(len(areas)))
+    ax.set_xticklabels(areas, rotation=45, ha='right', 
+                      fontsize=10, weight='semibold')
+    ax.set_yticks(np.arange(1, len(models)+1))
+    ax.set_title('Model Rank by Question Area', 
+               pad=20, fontsize=14, weight='bold')
+    ax.set_yticklabels([f'Rank {i}' for i in range(1, len(models)+1)], 
+                     fontsize=10)
+    ax.grid(axis='y', linestyle='--', alpha=0.5)
+    
+    # Add legend with custom handles
+    legend_handles = [Line2D([0], [0], marker='o', color=model_colors[model],
+                      label=model, markersize=10, linestyle='-')
+                   for model in models if model in model_colors]
+    ax.legend(handles=legend_handles, loc='upper left',
+            bbox_to_anchor=(1, 1), frameon=True,
+            title='Models', title_fontsize=11)
+    
+    # Save output
+    plt.tight_layout()
+    output_path_svg = output_folder / "bump_chart_domain_ranking.svg"
+    plt.savefig(output_path_svg, format='svg', bbox_inches="tight")
+    output_path_png = output_folder / "bump_chart_domain_ranking.png"
+    plt.savefig(output_path_png, format='png', bbox_inches="tight")
     plt.close()
     
-    print(f"Spider chart of overall accuracy saved to: {output_path}")
+    print(f"Bump chart saved to: {output_path_svg}")
