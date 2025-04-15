@@ -7,5 +7,7 @@ backup
 inference_results
 trash
 superannotate_work/prepareditems
+superannotate_work/annotations
 *.ps1
 helper_scripts/
+figures
