@@ -5,7 +5,7 @@ def count_evaluation_distribution(csv_path, output_distribution_csv, output_scor
     Reads the postprocessed CSV and counts the distribution of evaluation values for each criterion
     and each model. Then, it produces a CSV with a two-level row index (criterion, rating option)
     and columns corresponding to the original models. Additionally, it computes and saves a scoring
-    CSV based on the provided rubric.
+    CSV based on the provided rubric, including an overall score row.
 
     Parameters:
         csv_path (str): Path to the postprocessed CSV file.
@@ -156,7 +156,15 @@ def count_evaluation_distribution(csv_path, output_distribution_csv, output_scor
         scores_dict[crit_found][model_found] = mean_score
     
     scoring_df = pd.DataFrame.from_dict(scores_dict, orient='index')
+
+    # Calculate overall scores from the unrounded data and append as a new row
+    overall_scores = scoring_df.mean(axis=0)
+    overall_scores.name = 'Overall'
+    scoring_df = pd.concat([scoring_df, pd.DataFrame([overall_scores], index=['Overall'])])
+
+    # Round all values to 1 decimal place
     scoring_df = scoring_df.round(1)
+
     scoring_df.to_csv(output_scoring_csv)
     print(f"Scoring saved to {output_scoring_csv}")
 
