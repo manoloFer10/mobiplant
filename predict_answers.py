@@ -14,7 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 SUPPORTED_MODELS = ['llama', 'chatgpt', 'o1-mini', 'gemini', 'claude', 'r1', 'v3']
 
 TEMPERATURE = 0.7
-MAX_TOKENS_LONG_FORM = 4000
+MAX_TOKENS = 4096
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -233,7 +233,7 @@ def generateAnswers_long(df: pd.DataFrame,
     chat_models= instantiate_models(
         get_keys(), 
         models, 
-        max_tokens=MAX_TOKENS_LONG_FORM, 
+        max_tokens=MAX_TOKENS, 
         temperature=TEMPERATURE
     )
 
@@ -411,7 +411,7 @@ def run_answer_prediction(args):
             cot_system_message = 'The following is a multiple-choice question. Think step by step and then provide your FINAL answer between the tags <ANSWER> X </ANSWER> where X is ONLY the correct letter of your choice. Do not write additional text between the tags.'
             answers = generateAnswers_mcq(data,  
                                           args.models, 
-                                          max_tokens= 4096, 
+                                          max_tokens= MAX_TOKENS, 
                                           system_message = cot_system_message, 
                                           style = args.evaluation_style,
                                           restart_from=restart_from,
