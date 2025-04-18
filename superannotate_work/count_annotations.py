@@ -39,7 +39,8 @@ def count_evaluation_distribution(csv_path, output_distribution_csv, output_scor
         'correct_reasoning',
         'limitations',
         'omission_information',
-        'alignment_consensus'
+        'alignment_consensus',
+        'source'
     ]
     
     # Build a nested dictionary: distribution[criterion][model] = Series of counts.
@@ -132,6 +133,13 @@ def count_evaluation_distribution(csv_path, output_distribution_csv, output_scor
             "No": 1,
             "Yes": 0,
         },
+        'source': {
+            'Source leads to a correct answer':1,
+            'Source is not adequate to justify an answer':0.5,
+            'Source is unrelated to the question': 0.2,
+            'Source does not exist':0, 
+            'No source provided':0
+        },
     }
 
     scores_dict = {crit: {model: None for model in models} for crit in rubric_scores}
@@ -170,7 +178,7 @@ def count_evaluation_distribution(csv_path, output_distribution_csv, output_scor
 
 # Example usage:
 if __name__ == "__main__":
-    input_csv = "superannotate_work/annotations\original_with_evaluations.csv"  # your postprocessed CSV
+    input_csv = "original_with_evaluations.csv"  # your postprocessed CSV
     distribution_csv = "criteria_distribution.csv"
     scoring_csv = "scoring.csv"
     count_evaluation_distribution(input_csv, distribution_csv, scoring_csv)

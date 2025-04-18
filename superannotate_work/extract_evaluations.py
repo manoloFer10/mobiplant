@@ -19,7 +19,8 @@ criteria = {
     'reasoning': 'correct_reasoning',
     'limitations': 'limitations',
     'omission_information': 'omission_information',
-    'consensus': 'alignment_consensus'
+    'consensus': 'alignment_consensus',
+    'source': 'source'
 }
 
 # Question slots (as they appear in the evaluation CSV)
