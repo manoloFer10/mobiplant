@@ -343,7 +343,11 @@ def filter_data_by_settings(data_path,
                             restart_from, 
                             restart_path):
     data_path = Path(data_path)
-    data = pd.read_json(data_path)
+
+    try:
+        data = pd.read_json(data_path)
+    except:
+        data = pd.read_json(data_path, lines=True) 
     
     if num_samples != 'all':
         data = data.sample(n=int(num_samples))
