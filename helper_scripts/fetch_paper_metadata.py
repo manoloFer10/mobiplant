@@ -85,6 +85,8 @@ def main():
     # Load data
     file_path = 'data/normalized.json'
     data = pd.read_json(file_path)
+    # file_path = 'data\synthetic_data\all_questions.jsonl'
+    # data = pd.read_json(file_path, lines=True)
 
     query_metadata(data)
 
