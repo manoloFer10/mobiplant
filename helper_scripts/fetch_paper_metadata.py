@@ -35,14 +35,16 @@ def query_metadata(data):
     output_path = 'data/doi/processed_paper_data.json'
     
     def process_row(row):
-        link = row['source']
-        dois = extract_doi(link)
 
         metadata = pd.Series({
             'doi': None,
             'Year': None,
             'Citations': None
         })
+
+        # Extract DOI from the source link if the link is human annotated
+        link = row['source']
+        dois = extract_doi(link)
         if dois != []:
             for doi in dois:
                 year, citations = query_crossref(doi)
@@ -55,7 +57,20 @@ def query_metadata(data):
                 else:
                     print(f'No references found for {doi}')
         else:
-            print(f'DOI could not be extracted for {link}')
+            print(f'DOI could not be extracted for {dois}')
+
+        # Extract DOI from the source link if the link is cleanly generated: 1 doi per question
+        # doi = row['source']
+        # year, citations = query_crossref(doi)
+        # if year or citations:
+        #     metadata = pd.Series({
+        #         'doi': doi,
+        #         'Year': year,
+        #         'Citations': citations
+        #     })
+        # else:
+        #     print(f'No references found for {doi}')
+        
         return metadata
         
     tqdm.pandas(desc="Adding metadata")
@@ -65,18 +80,6 @@ def query_metadata(data):
 
     data.to_json(output_path, orient='records', indent=2)
     print(f"Processed data saved to {output_path}") 
-
-def extractable(data):
-    # Create DOI column using apply() with progress bar
-    tqdm.pandas(desc="Extracting DOIs")
-    data['doi'] = data['source'].progress_apply(lambda x: extract_doi(x) or None)
-    
-    # Save results
-    output_path = 'data/doi/extractable_dois.json'
-    data.to_json(output_path, index=False, orient='records', indent=2)
-    
-    print(f"Processed data saved to {output_path}")
-    return data
 
 def main():
     # Load data
