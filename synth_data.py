@@ -89,7 +89,7 @@ Return a JSON array adhering to this schema:
             # Extract DOI from filename (format: "YYYY DOI.pdf")
             filename = pdf_path.stem
             if ' ' in filename:
-                doi = filename.split(' ', 1)[1]  # Get text after first space
+                doi = filename.split(' ', 1)[1].strip()  # Get text after first space
             else:
                 doi = filename  # Fallback for malformed names
 
@@ -112,7 +112,7 @@ Return a JSON array adhering to this schema:
             """
             raise RuntimeError(error_msg) from e
 
-    #@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
     def _query_gemini(self, pdf_path: Path) -> str:
         response = self.client.models.generate_content(
                 model="gemini-2.5-pro-preview-03-25",
@@ -177,7 +177,7 @@ Return a JSON array adhering to this schema:
     def _transform_doi(self, doi: str) -> str:
         """Normalize DOI from filename"""          
         # Normalize DOI: replace hyphens with slashes
-        normalized_doi = doi.replace("_", "/")
+        normalized_doi = doi.strip().replace("_", "/")
         return normalized_doi
 
     def process_journal_folders(self, root_input: str, output_path: str):
@@ -227,15 +227,17 @@ Return a JSON array adhering to this schema:
                         data = json.loads(line)
                         processed.add((data["source_journal"], data["source"].replace("/","_")))
                     except json.JSONDecodeError:
+                        print(f"Invalid JSON line: {line.strip()}")
                         continue
         return processed
 
     def _extract_doi(self, filename: str) -> str:
         """Extract DOI from filename with improved validation"""
         try:
+            filename = filename.removesuffix('.pdf') # Remove .pdf extension
             # Split on first space and remove year
             parts = filename.split(" ", 1)
-            return parts[1].rsplit(".", 1)[0]  # Remove .pdf extension
+            return parts[1].strip() 
         except IndexError:
             # Fallback pattern for non-standard filenames
             match = re.search(r"\b10\.\d{4,}/[\w./-]+", filename)
