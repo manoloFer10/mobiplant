@@ -88,12 +88,11 @@ Return a JSON array adhering to this schema:
         try:
             # Extract DOI from filename (format: "YYYY DOI.pdf")
             filename = pdf_path.stem
-            print(f'raw filename: {filename}')
             if ' ' in filename:
                 doi = filename.split(' ', 1)[1]  # Get text after first space
             else:
                 doi = filename  # Fallback for malformed names
-            print(f'raw doi: {doi}')
+
             # Process PDF with Gemini
             response = self._query_gemini(pdf_path)
             
@@ -179,12 +178,6 @@ Return a JSON array adhering to this schema:
         """Normalize DOI from filename"""          
         # Normalize DOI: replace hyphens with slashes
         normalized_doi = doi.replace("_", "/")
-        
-        # Validate DOI format
-        if not re.match(r"^10\.\d{4,}/", normalized_doi):
-            raise ValueError(f"Invalid DOI format: {normalized_doi}")
-        
-        print(f"Normalized DOI: {normalized_doi}")
         return normalized_doi
 
     def process_journal_folders(self, root_input: str, output_path: str):
