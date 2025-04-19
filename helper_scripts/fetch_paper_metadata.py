@@ -2,6 +2,7 @@ import pandas as pd
 import re
 import requests
 from tqdm import tqdm
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Function to extract DOIs from links
 def extract_doi(link):
@@ -15,6 +16,7 @@ def extract_doi(link):
     return dois  
 
 # Function to query CrossRef API
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 def query_crossref(doi):
     base_url = f"https://api.crossref.org/works/{doi}"
     try:
@@ -32,7 +34,7 @@ def query_crossref(doi):
 
 
 def query_metadata(data):
-    output_path = 'data/doi/processed_paper_data.json'
+    output_path = 'data/doi/synth_processed_paper_data.json'
     
     def process_row(row):
 
@@ -81,12 +83,13 @@ def query_metadata(data):
     data.to_json(output_path, orient='records', indent=2)
     print(f"Processed data saved to {output_path}") 
 
+
 def main():
     # Load data
-    file_path = 'data/normalized.json'
-    data = pd.read_json(file_path)
-    # file_path = 'data\synthetic_data\all_questions.jsonl'
-    # data = pd.read_json(file_path, lines=True)
+    # file_path = 'data/normalized.json'
+    # data = pd.read_json(file_path)
+    file_path = 'data\synthetic_data/all_questions.jsonl'
+    data = pd.read_json(file_path, lines=True)
 
     query_metadata(data)
 
