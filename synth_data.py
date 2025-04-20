@@ -58,7 +58,7 @@ Assign an area (must be one from, gene regulation, genome and genomics, cell bio
 
 - Craft Unique Questions:
 
-From the extracted facts, formulate questions that are clear, concise, and unambiguous. The five resulting questions should be different from each other, resulting in a unique set of questions. The questions should not be information directly from the study (e.g. Which are the proteins identified in this study?). Instead, they should be document-agnostic (e.g. What proteins have been identified as molecular partners of the Arabidopsis lncRNA ASCO?).
+From the extracted facts, formulate questions that are clear, concise, and unambiguous. The five resulting questions should be different from each other, resulting in a unique set of questions. The questions should NOT be pointing to the study (e.g. What happened in this study?, In the work done by XX, ... , Acording to the study/text ...). Instead, they should be phrased without mentioning the document (e.g. What proteins have been identified as molecular partners of the Arabidopsis lncRNA ASCO?).
 
 Note: For plant-related facts: Explicitly mention the species in the question (e.g., “What adaptation does Zea mays use to…?”).
 
@@ -181,7 +181,7 @@ Return a JSON array adhering to this schema:
         return normalized_doi
 
     def process_journal_folders(self, root_input: str, output_path: str):
-        output_file = Path(output_path) / "all_questions.jsonl"
+        output_file = Path(output_path) / "filtered_questions.jsonl"
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
         # Load already processed entries
