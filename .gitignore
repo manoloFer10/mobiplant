@@ -5,9 +5,9 @@ full_results
 long_answer_results_everyone
 backup
 inference_results
+synth_results
 trash
 superannotate_work/prepareditems
 superannotate_work/annotations
 *.ps1
-helper_scripts/
 figures

@@ -360,7 +360,7 @@ def filter_data_by_settings(data_path,
         if restart_path is None:
             raise ValueError("restart_path must be provided when restart_from is provided")
 
-        previous_results = pd.read_csv(restart_path)
+        previous_results = pd.read_json(restart_path)
         previous_results = previous_results.iloc[:restart_from]
         remaining_data = data.iloc[restart_from:]
         combined_data = pd.concat([previous_results, remaining_data], ignore_index=True)
@@ -372,12 +372,12 @@ def filter_data_by_settings(data_path,
     
 def save_results_to_csv(data: pd.DataFrame, setting, models, output_folder):
 
-    output_folder = Path(output_folder)
+    output_folder = Path(output_folder / 'inference')
     ensure_dir(output_folder)
     
     models_str = "_".join(models)
-    output_file = output_folder / 'inference' / f"{setting}_{models_str}_results.csv"
-    data.to_csv(output_file)
+    output_file = output_folder / f"{setting}_{models_str}_results.json"
+    data.to_json(output_file, indent=2, orient='records')
     print(f"Saved results to {output_file}")
 
 
