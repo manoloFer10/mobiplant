@@ -96,7 +96,7 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
         metrics = {}
         total = len(subset)
         for model in model_names:
-            suffix = model.split('_')[-1]
+            #suffix = model.split('_')[-1]
             #answer_col = f'answer_{suffix}'
             answer_col = f'answer'
             
@@ -126,7 +126,7 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
     overall_metrics = {}
     total_overall = len(df_dataset)
     for model in model_names:
-        suffix = model.split('_')[-1]
+        #suffix = model.split('_')[-1]
         #answer_col = f'answer_{suffix}'
         answer_col = 'answer'
         
@@ -147,7 +147,7 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
         overall_metrics[f'{model}_total_accuracy'] = total_accuracy
         overall_metrics[f'{model}_answer_accuracy'] = answer_accuracy
         overall_metrics[f'{model}_error_rate'] = error_rate
-
+    overall_metrics['count'] = total_overall
     results['Overall'] = overall_metrics
 
     # Convert results to DataFrame and aggregate
@@ -156,7 +156,8 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
     
     for base_model in base_models:
         for metric in ['total_accuracy', 'answer_accuracy', 'error_rate']:
-            run_columns = [f"{base_model}_{suffix}_{metric}" for suffix in ['first', 'second', 'third']]
+            #run_columns = [f"{base_model}_{suffix}_{metric}" for suffix in ['first', 'second', 'third']]
+            run_columns = [f"{base_model}_{metric}"]
             if all(col in results_df.columns for col in run_columns):
                 mean_values = results_df[run_columns].mean(axis=1).round(1)
                 std_values = results_df[run_columns].std(axis=1).round(1)
