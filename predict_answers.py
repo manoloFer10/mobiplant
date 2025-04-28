@@ -429,7 +429,7 @@ def run_answer_prediction(args):
         raise ValueError(f'unexpected value {args.setting} for an inference setting')
 
     #save answers
-    save_results_to_csv(answers, args.setting + f'_{args.evaluation_style}', args.models, args.results_dataset_path)
+    save_results_to_csv(answers, args.setting + f'_{args.evaluation_style}', args.models, Path(args.results_dataset_path))
 
 
 def main():

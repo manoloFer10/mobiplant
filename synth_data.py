@@ -52,13 +52,16 @@ Generate 5 independent multiple-choice questions (3 options each) from a publica
 **Step-by-Step Instructions**
 - Identify Key Facts:
 
-Read the whole text to understand the work and carefully extract 5 distinct facts (e.g., unique claims, species names, processes, numerical data).
+Read the whole text to understand the work and carefully extract 5 distinct facts (e.g., conclusions, unique claims).
 If a fact involves a plant species, note its scientific name.
 Assign an area (must be one from, gene regulation, genome and genomics, cell biology and signaling, growth and development, hormones, physiology and metabolism, evolution, biotechnology or environment) if applicable; otherwise, use null.
 
 - Craft Unique Questions:
 
-From the extracted facts, formulate questions that are clear, concise, and unambiguous. The five resulting questions should be different from each other, resulting in a unique set of questions. The questions should NOT be pointing to the study (e.g. What happened in this study?, In the work done by XX, ... , Acording to the study/text ...). Instead, they should be phrased without mentioning the document (e.g. What proteins have been identified as molecular partners of the Arabidopsis lncRNA ASCO?).
+From the extracted facts, formulate questions that are clear, concise, and unambiguous:
+    - The five resulting questions should be different from each other, resulting in a unique set of questions. 
+    - The questions should NOT be pointing to the study (e.g. What happened in this study?, In the work done by XX, ... , Acording to the study/text ...). Instead, they should be phrased without mentioning the document (e.g. What proteins have been identified as molecular partners of the Arabidopsis lncRNA ASCO?).
+    - The questions should not represent methods/techniques or specific experimental details (e.g. What is the relative timing of cell expansion versus cell division in ...,). Rather, they should focus on the main concepts or conclusions of the study.
 
 Note: For plant-related facts: Explicitly mention the species in the question (e.g., “What adaptation does Zea mays use to…?”).
 
@@ -76,7 +79,8 @@ For plant species: Use exact scientific names (e.g., "Oryza sativa").
 
 - Validate:
 
-Ensure questions cannot be answered without the text.
+Once chosen, ensure questions are asked about specific conclusions or key concepts about the work. They should not be about methods or experimental details.
+If any question does not meet the criteria, discard it and create a new one that does.
 Confirm plant_species is "non-specific" unless explicitly tied to a species.
 
 **Output Format**

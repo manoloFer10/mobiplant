@@ -35,13 +35,13 @@ def perform_metrics(df_dataset, output_folder):
     model_columns = [col for col in df_dataset.columns if col.startswith('CoT_election_by_')]
     model_names = [col.replace('CoT_election_by_', '') for col in model_columns]
 
-    clean_names = []
-    for model in model_names:
-        suffix = model.split('_')[1]
-        name = model.split('_')[0]
-        clean_name = f'{model_names_mapping[name]}_{suffix}'
-        clean_names.append(clean_name)
-    model_names = clean_names
+    # clean_names = []
+    # for model in model_names:
+    #     suffix = model.split('_')[1]
+    #     name = model.split('_')[0]
+    #     clean_name = f'{model_names_mapping[name]}_{suffix}'
+    #     clean_names.append(clean_name)
+    # model_names = clean_names
 
     df_dataset.rename(columns=dict(zip(model_columns, model_names)), inplace=True)
 
@@ -53,10 +53,10 @@ def perform_metrics(df_dataset, output_folder):
         df_dataset[model] = df_dataset[model].astype(pd.Int64Dtype())  # Allows integer NaN
 
     # Group by plant_species and calculate accuracies
-    group_by_and_score(df_dataset, 'normalized_plant_species', model_names, output_folder)
+    group_by_and_score(df_dataset, 'plant_species', model_names, output_folder)
 
     # Group by area and calculate accuracies
-    group_by_and_score(df_dataset, 'normalized_area', model_names, output_folder)
+    group_by_and_score(df_dataset, 'area', model_names, output_folder)
 
     # Calculate accuracies by area and plant species for each model.
     # for model in model_names:
@@ -97,7 +97,8 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
         total = len(subset)
         for model in model_names:
             suffix = model.split('_')[-1]
-            answer_col = f'answer_{suffix}'
+            #answer_col = f'answer_{suffix}'
+            answer_col = f'answer'
             
             valid_mask = subset[model].isin(VALID_VALUES)
             valid_count = valid_mask.sum()
@@ -126,7 +127,8 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
     total_overall = len(df_dataset)
     for model in model_names:
         suffix = model.split('_')[-1]
-        answer_col = f'answer_{suffix}'
+        #answer_col = f'answer_{suffix}'
+        answer_col = 'answer'
         
         valid_mask = df_dataset[model].isin(VALID_VALUES)
         valid_count = valid_mask.sum()
@@ -530,6 +532,8 @@ def perform_automatic_plots(df_dataset, output_folder):
         plot_lollipop_chart(origin_folder / 'normalized_area' / 'all_results.csv', MODEL_COLORS, output_folder)
 
         plot_bump_chart(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
+
+        plot_scatter_ranking_chart(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
     else:
         print('No metrics results folder detected... passing to statistics plots.')
 
@@ -555,7 +559,7 @@ def plot_citation_bin_accuracy(data_path, output_folder):
     plt.title('Mean Model Accuracy by Number of Citations', fontsize=14)
     plt.xlabel('Number of citations', fontsize=12)
     plt.ylabel('Mean Accuracy (%)', fontsize=12)
-    plt.ylim(0, 105)
+    plt.ylim(70, 100)
     plt.grid(axis='y', alpha=0.3)
     
     for bar in bars:
@@ -631,21 +635,30 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
     # --- Plot 1: Mean Accuracy ---
     df_mean = df.copy()
     df_mean['mean_accuracy'] = df.mean(axis=1)
+    # Calculate moving average with a window of 3 (adjust window size as needed)
+    window_size = 3
+    df_mean['moving_avg'] = df_mean['mean_accuracy'].rolling(
+        window=window_size,
+        min_periods=1,
+        center=True
+    ).mean()
     
     fig, ax1 = plt.subplots(figsize=(14, 7))
     x = range(len(df_mean.index))
     
     # Accuracy plot
-    ax1.scatter(x, df_mean['mean_accuracy'], color='darkblue', s=100, zorder=3)
+    ax1.scatter(x, df_mean['mean_accuracy'], color='darkblue', s=100, zorder=3, label='Mean Accuracy')
     ax1.plot(x, df_mean['mean_accuracy'], linestyle=':', color='gray', alpha=0.7)
+    ax1.plot(x, df_mean['moving_avg'], color='red', linewidth=2, label=f'{window_size}-bin Moving Average')
+
     ax1.set_ylabel('Mean Accuracy (%)', fontsize=12)
-    ax1.set_ylim(0, 105)
+    ax1.set_ylim(0, 100)
     ax1.grid(axis='y', alpha=0.3)
     
     # Sample count plot
-    ax2 = ax1.twinx()
-    bars = ax2.bar(x, sample_counts, color='lightblue', alpha=0.6)
-    ax2.set_ylabel('Number of Samples', fontsize=12)
+    # ax2 = ax1.twinx()
+    # bars = ax2.bar(x, sample_counts, color='lightblue', alpha=0.6)
+    # ax2.set_ylabel('Number of Samples', fontsize=12)
     
     # Configure axes
     ax1.set_xticks(x)
@@ -654,19 +667,21 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
     for label in ax1.get_xticklabels():
         label.set_ha('right')
     
-    ax1.set_title('Mean Accuracy and Sample Distribution by Year', fontsize=14)
+    ax1.set_title('Model Accuracy by Year', fontsize=14)
     ax1.set_xlabel('Year Range', fontsize=12)
+    ax1.legend(loc='best')  # Add legend
     
     # Add value labels
     for i, acc in enumerate(df_mean['mean_accuracy']):
         ax1.text(x[i], acc + 1, f'{acc:.1f}%', ha='center', va='bottom', fontsize=9)
         
-    for bar in bars:
-        height = bar.get_height()
-        if height > 0:
-            ax2.text(bar.get_x() + bar.get_width()/2., height,
-                     f'{int(height)}', ha='center', va='bottom', fontsize=8)
+    # for bar in bars:
+    #     height = bar.get_height()
+    #     if height > 0:
+    #         ax2.text(bar.get_x() + bar.get_width()/2., height,
+    #                  f'{int(height)}', ha='center', va='bottom', fontsize=8)
     
+    plt.ylim(70,105)
     plt.tight_layout()
     plt.savefig(output_folder / 'years.png', format='png', dpi=300, bbox_inches='tight')
     plt.savefig(output_folder / 'years.svg', format='svg', dpi=300, bbox_inches='tight')
@@ -853,6 +868,17 @@ def plot_bump_chart(data_path: str, model_colors: dict, output_folder: Path):
         ax.scatter(x, y, s=120, color=color,
                  edgecolor='white', linewidth=1.2,
                  marker='o', zorder=3, label=model)
+        
+        # Add score annotations
+        model_col = model_cols[models.index(model)]  # Get column name for scores
+        scores = df[model_col].values  # Actual scores for this model
+        for xi, yi, score in zip(x, y, scores):
+            ax.text(xi, yi - 0.15, 
+                    f"{score:.1f}", 
+                    ha='center', 
+                    va='bottom', 
+                    fontsize=8, 
+                    color=color)
     
     # Customize axis
     ax.invert_yaxis()
@@ -883,3 +909,71 @@ def plot_bump_chart(data_path: str, model_colors: dict, output_folder: Path):
     plt.close()
     
     print(f"Bump chart saved to: {output_path_svg}")
+
+
+def plot_scatter_ranking_chart(data_path: str, model_colors: dict, output_folder: Path):
+    """Generate score chart with actual values on y-axis"""
+    
+    # Load and process data
+    df = pd.read_csv(data_path).dropna()
+    df = df[df.iloc[:, 0] != 'Overall']  # Remove overall row
+    areas = df.iloc[:, 0].values
+    model_cols = [col for col in df.columns if '_answer_accuracy' in col]
+    models = [col.split('_')[0] for col in model_cols]
+    
+    # Create plot
+    fig, ax = plt.subplots(figsize=(12, 7))
+    fig.patch.set_facecolor('white')
+    
+    # Plot lines with actual scores
+    for model in models:
+        model_col = f"{model}_answer_accuracy"
+        scores = df[model_col].values
+        x = np.arange(len(areas))
+        y = scores
+        
+        # Create line segments with model color
+        color = model_colors.get(model, '#777777')
+        points = np.array([x, y]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+        
+        lc = LineCollection(segments, 
+                          colors=[color]*(len(segments)),
+                          linewidth=2.5,
+                          alpha=0.9,
+                          zorder=2)
+        ax.add_collection(lc)
+        
+        # Add styled markers
+        ax.scatter(x, y, s=120, color=color,
+                 edgecolor='white', linewidth=1.2,
+                 marker='o', zorder=3, label=model)
+
+    # Customize axis
+    ax.set_ylim(60, 100)  # Set fixed y-axis range
+    ax.set_xticks(np.arange(len(areas)))
+    ax.set_xticklabels(areas, rotation=45, ha='right', 
+                      fontsize=10, weight='semibold')
+    ax.set_yticks(np.arange(60, 101, 5))  # Grid lines every 5 points
+    ax.set_title('Model Performance by Question Area', 
+               pad=20, fontsize=14, weight='bold')
+    ax.set_ylabel('Score (%)', fontsize=12)
+    ax.grid(axis='y', linestyle='--', alpha=0.5)
+
+    # Add legend
+    legend_handles = [Line2D([0], [0], marker='o', color=model_colors[model],
+                      label=model, markersize=10, linestyle='-')
+                   for model in models if model in model_colors]
+    ax.legend(handles=legend_handles, loc='upper left',
+            bbox_to_anchor=(1, 1), frameon=True,
+            title='Models', title_fontsize=11)
+    
+    # Save output
+    plt.tight_layout()
+    output_path_svg = output_folder / "score_chart_domain.svg"
+    plt.savefig(output_path_svg, format='svg', bbox_inches="tight")
+    output_path_png = output_folder / "score_chart_domain.png"
+    plt.savefig(output_path_png, format='png', bbox_inches="tight")
+    plt.close()
+    
+    print(f"Score chart saved to: {output_path_svg}")
