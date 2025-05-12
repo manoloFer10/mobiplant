@@ -328,13 +328,14 @@ def generateAnswers_mcq(df: pd.DataFrame,
                 print(f'Error with {model_name}: {str(e)}')
                 print(f"Raw response: {response.content if 'response' in locals() else ''}")
         
-        save_results_to_csv(
-            data=df,
-            setting=f'mcq-temp-{style}',
-            models=models,
-            output_folder=output_path / 'temp'
-        )
-        print(f'Saved until index: {index}, restart_from should be {index+1}')
+        if index % 50 == 0:
+            save_results_to_csv(
+                data=df,
+                setting=f'mcq-temp-{style}',
+                models=models,
+                output_folder=output_path / 'temp'
+            )
+            print(f'Saved until index: {index}, restart_from should be {index+1}')
     return df
 
 def filter_data_by_settings(data_path, 
