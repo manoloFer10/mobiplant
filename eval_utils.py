@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from matplotlib.lines import Line2D
 from matplotlib import patheffects
+from matplotlib.patches import Patch
 from matplotlib.collections import LineCollection
 
 
@@ -33,7 +34,7 @@ def perform_metrics(df_dataset, output_folder):
     }
 
     model_columns = [col for col in df_dataset.columns if col.startswith('CoT_election_by_')]
-    model_names = [col.replace('CoT_election_by_', '') for col in model_columns]
+    model_names = [model_names_mapping[col.replace('CoT_election_by_', '')] for col in model_columns]
 
     # clean_names = []
     # for model in model_names:
@@ -522,6 +523,16 @@ def perform_automatic_plots(df_dataset, output_folder):
         'DeepSeek R1': '#003366'
     }
 
+    MODEL_COLORS  = {
+        'LLaMA': '#8B4513',
+        'Gemini': '#4285F4',
+        'Claude': '#FF6C0A',
+        'GPT-4o': '#10A37F',
+        'O1-mini': '#8FB339',
+        'DeepSeek V3': '#0B5E99',
+        'DeepSeek R1': '#003366'
+    }
+
     if os.path.exists(origin_folder / 'metrics'):
         origin_folder = origin_folder / 'metrics'
         #generate_overall_spidergraph(origin_folder / 'normalized_area' / 'answer_accuracy.csv', 'area', output_folder )
@@ -530,11 +541,16 @@ def perform_automatic_plots(df_dataset, output_folder):
         bin_df = create_year_bins(df_dataset)
         plot_year_accuracy(origin_folder / 'year_bin' / 'answer_accuracy.csv', bin_df['year_bin'].value_counts(), output_folder)
 
-        plot_lollipop_chart(origin_folder / 'normalized_area' / 'all_results.csv', MODEL_COLORS, output_folder)
-
-        plot_bump_chart(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
-
-        plot_scatter_ranking_chart(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
+        try:
+            plot_lollipop_chart(origin_folder / 'normalized_area' / 'all_results.csv', MODEL_COLORS, output_folder)
+            plot_bump_chart(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
+            plot_scatter_ranking_chart(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
+            plot_grouped_barplot(origin_folder / 'normalized_area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
+        except:
+            plot_lollipop_chart(origin_folder / 'area' / 'all_results.csv', MODEL_COLORS, output_folder)
+            plot_bump_chart(origin_folder / 'area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
+            plot_scatter_ranking_chart(origin_folder / 'area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
+            plot_grouped_barplot(origin_folder / 'area' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
     else:
         print('No metrics results folder detected... passing to statistics plots.')
 
@@ -557,9 +573,9 @@ def plot_citation_bin_accuracy(data_path, output_folder):
     plt.figure(figsize=(12, 6))
     bars = plt.bar(df_mean.index, df_mean['mean_accuracy'], color='skyblue')
     
-    plt.title('Mean Model Accuracy by Number of Citations', fontsize=14)
+    plt.title('Model Accuracy by Citation Count', fontweight='bold', fontsize=16)
     plt.xlabel('Number of citations', fontsize=12)
-    plt.ylabel('Mean Accuracy (%)', fontsize=12)
+    plt.ylabel('Accuracy (%)', fontsize=12)
     plt.ylim(70, 100)
     plt.grid(axis='y', alpha=0.3)
     
@@ -978,3 +994,72 @@ def plot_scatter_ranking_chart(data_path: str, model_colors: dict, output_folder
     plt.close()
     
     print(f"Score chart saved to: {output_path_svg}")
+
+
+def plot_grouped_barplot(data_path: str, model_colors: dict, output_folder: Path):
+    """Generate a grouped bar plot for each domain showing model performance"""
+    
+    # Load and process data
+    df = pd.read_csv(data_path).dropna()
+    df = df[df.iloc[:, 0] != 'Overall']  # Remove overall row
+    areas = df.iloc[:, 0].values
+    model_cols = [col for col in df.columns if '_answer_accuracy' in col]
+    models = [col.split('_')[0] for col in model_cols]
+    
+    # Create plot with adjusted size
+    fig, ax = plt.subplots(figsize=(14, 8))
+    fig.patch.set_facecolor('white')
+    
+    # Calculate bar dimensions
+    num_domains = len(areas)
+    num_models = len(models)
+    bar_width = 0.8 / num_models  # Width of each model's bar
+
+    # Plot bars for each model
+    for model_idx, model in enumerate(models):
+        model_col = f"{model}_answer_accuracy"
+        scores = df[model_col].values
+        
+        # Calculate positions for this model's bars
+        x_positions = np.arange(num_domains) + model_idx * bar_width - (bar_width * (num_models - 1) / 2)
+        
+        # Get color from dictionary or use default
+        color = model_colors.get(model, '#777777')
+        
+        # Plot bars with styling
+        ax.bar(x_positions, 
+               scores, 
+               width=bar_width, 
+               color=color,
+               edgecolor='white', 
+               linewidth=1.2,
+               label=model)
+
+    # Customize axis
+    ax.set_ylim(60, 100)
+    ax.set_xticks(np.arange(num_domains))
+    ax.set_xticklabels(areas, rotation=45, ha='right', fontsize=10, weight='semibold')
+    ax.set_yticks(np.arange(60, 101, 5))
+    ax.set_title('Model Performance by Question Area', pad=20, fontsize=14, weight='bold')
+    ax.set_ylabel('Score (%)', fontsize=12)
+    ax.grid(axis='y', linestyle='--', alpha=0.5)
+
+    # Create legend with model colors
+    legend_handles = [Patch(color=model_colors[model], label=model) 
+                     for model in models if model in model_colors]
+    ax.legend(handles=legend_handles, 
+             loc='upper left',
+             bbox_to_anchor=(1, 1), 
+             frameon=True,
+             title='Models', 
+             title_fontsize=11)
+
+    # Save outputs
+    plt.tight_layout()
+    output_path_svg = output_folder / "grouped_bar_chart.svg"
+    plt.savefig(output_path_svg, format='svg', bbox_inches="tight")
+    output_path_png = output_folder / "grouped_bar_chart.png"
+    plt.savefig(output_path_png, format='png', bbox_inches="tight")
+    plt.close()
+    
+    print(f"Grouped bar plot saved to: {output_path_svg}")
