@@ -93,8 +93,8 @@ def plot_hybrid_evaluation(human_scoring_csv, auto_scores_csv, output_path):
     plt.title('Human vs Automatic Performance', fontsize=16, pad=20, fontweight='bold')
     plt.xlabel('Human Score (Average)')
     plt.ylabel('Automatic Accuracy')
-    plt.xlim(0, 100)
-    plt.ylim(0, 100)
+    plt.xlim(40, 90)
+    plt.ylim(40, 90)
     
     # Custom legend
     handles, labels = scatter.get_legend_handles_labels()

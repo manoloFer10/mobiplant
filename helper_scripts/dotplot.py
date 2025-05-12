@@ -80,9 +80,10 @@ def create_static_dot_plot(scoring_csv_path, output_path, dpi=300):
         hue='Model',
         palette=model_palette,
         s=150,
-        edgecolor='w',
-        linewidth=1,
-        zorder=2
+        marker='X',  # Change markers to X
+        edgecolor='face',  # Use the same color as the marker face
+        linewidth=0.5,
+        zorder=1
     )
     
     # Add criterion labels
