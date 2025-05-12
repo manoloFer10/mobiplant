@@ -33,8 +33,7 @@ def query_crossref(doi):
         return None, None
 
 
-def query_metadata(data):
-    output_path = 'data/doi/synth_processed_paper_data.json'
+def query_metadata(data, output_path):
     
     def process_row(row):
 
@@ -88,10 +87,11 @@ def main():
     # Load data
     # file_path = 'data/normalized.json'
     # data = pd.read_json(file_path)
-    file_path = 'data\synthetic_data/filtered_questions.jsonl'
+    file_path = 'data\synthetic_data/synth_questions.jsonl'
     data = pd.read_json(file_path, lines=True)
 
-    query_metadata(data)
+    output_path = 'data/doi/synth_processed_paper_data.json'
+    query_metadata(data,output_path)
 
 
 if __name__ == '__main__':
