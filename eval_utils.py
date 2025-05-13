@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from pathlib import Path
 from matplotlib.lines import Line2D
 from matplotlib import patheffects
@@ -555,213 +556,182 @@ def perform_automatic_plots(df_dataset, output_folder):
         print('No metrics results folder detected... passing to statistics plots.')
 
 
+greens_cmap = mpl.colors.LinearSegmentedColormap.from_list(
+    'greens', ['#edf8e9', '#74c476', '#006d2c']
+)
+normalize = mpl.colors.Normalize(vmin=70, vmax=100)
+
 def plot_citation_bin_accuracy(data_path, output_folder):
-    # Read and prepare data
-    df = pd.read_csv(data_path, index_col=0)
-    df = df.drop('Overall', errors='ignore')
-    
-    # Exclude the 'Overall' row and sort bins logically
-    df = df.drop('Overall', errors='ignore')
-    df = df.drop('count', axis=1)
+    df = pd.read_csv(data_path, index_col=0).drop('Overall', errors='ignore').drop('count', axis=1)
     bin_order = ['0', '1-10', '11-100', '101-500', '501-1000', '1001-1702']
     df = df.reindex(bin_order)
-    
-    # --- Plot 1: Mean Accuracy ---
+
+    # Mean accuracy
     df_mean = df.copy()
     df_mean['mean_accuracy'] = df.mean(axis=1)
-    
+
     plt.figure(figsize=(12, 6))
-    bars = plt.bar(df_mean.index, df_mean['mean_accuracy'], color='skyblue')
-    
+    heights = df_mean['mean_accuracy']
+    colors = [greens_cmap(normalize(h)) for h in heights]
+    bars = plt.bar(df_mean.index, heights, color=colors)
+
     plt.title('Model Accuracy by Citation Count', fontweight='bold', fontsize=16)
     plt.xlabel('Number of citations', fontsize=12)
     plt.ylabel('Accuracy (%)', fontsize=12)
     plt.ylim(70, 100)
     plt.grid(axis='y', alpha=0.3)
-    
+
     for bar in bars:
         height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height,
-                 f'{height:.1f}%',
-                 ha='center', va='bottom')
-    
+        plt.text(bar.get_x() + bar.get_width() / 2, height,
+                 f'{height:.1f}%', ha='center', va='bottom')
+
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(output_folder / 'citations.png', format='png', dpi=300, bbox_inches='tight')
-    plt.savefig(output_folder / 'citations.svg', format='svg', dpi=300, bbox_inches='tight')
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    for ext in ['png', 'svg']:
+        plt.savefig(output_folder / f'citations.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
-    
-    # --- Plot 2: Individual Models ---
+
+    # Individual models
     models = df.columns.tolist()
     n_models = len(models)
-    
     if n_models == 0:
-        return  # No models to plot
-    
+        return
+
     fig, axes = plt.subplots(n_models, 1, figsize=(12, 3 * n_models))
     if n_models == 1:
         axes = [axes]
-    
-    for i, (model, ax) in enumerate(zip(models, axes)):
-        bars = ax.bar(df.index, df[model], color='skyblue')
+
+    for model, ax in zip(models, axes):
+        heights = df[model]
+        colors = [greens_cmap(normalize(h)) for h in heights]
+        bars = ax.bar(df.index, heights, color=colors)
         ax.set_title(f'Model: {model}', fontsize=10)
         ax.set_ylim(0, 105)
         ax.grid(axis='y', alpha=0.3)
-        
-        # Value labels
+
         for bar in bars:
             height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.1f}%',
-                    ha='center', va='bottom', fontsize=8)
-        
-        # X-axis labels only on bottom subplot
-        # X-axis labels only on bottom subplot
-        if i == n_models - 1:
-            # Rotate labels and set alignment
+            ax.text(bar.get_x() + bar.get_width() / 2, height,
+                    f'{height:.1f}%', ha='center', va='bottom', fontsize=8)
+
+        if model == models[-1]:
             ax.tick_params(axis='x', rotation=45, labelsize=8)
-            # Correct horizontal alignment after rotation
             for label in ax.get_xticklabels():
                 label.set_ha('right')
         else:
             ax.set_xticklabels([])
-        
+
         ax.tick_params(axis='y', labelsize=8)
-    
-    # Common labels
+
     fig.text(0.5, 0.02, 'Number of citations', ha='center', va='center', fontsize=12)
-    fig.text(0.02, 0.5, 'Accuracy (%)', ha='center', va='center', rotation='vertical', fontsize=12)
-    
-    plt.tight_layout(rect=[0.03, 0.03, 1, 0.95])  # Adjust for labels
+    fig.text(0.02, 0.5, 'Accuracy (%)', ha='center', va='center',
+             rotation='vertical', fontsize=12)
+
+    plt.tight_layout(rect=[0.03, 0.03, 1, 0.95])
     plt.suptitle('Model Accuracies by Number of Citations', fontsize=14, y=0.98)
-    plt.savefig(output_folder / 'citations_models.png', format='png', dpi=300, bbox_inches='tight')
-    plt.savefig(output_folder / 'citations_models.svg', format='svg', dpi=300, bbox_inches='tight')
+    for ext in ['png', 'svg']:
+        plt.savefig(output_folder / f'citations_models.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
 
 
 def plot_year_accuracy(data_path, sample_counts, output_folder):
-        # Read and prepare data
-    df = pd.read_csv(data_path, index_col=0)
-    df = df.drop('Overall', errors='ignore')
-    df = df.drop('count', axis=1)
-    
+    df = pd.read_csv(data_path, index_col=0).drop('Overall', errors='ignore').drop('count', axis=1)
     sorted_bins = sorted(df.index, key=lambda x: int(x.split('-')[0]))
     df = df.loc[sorted_bins]
     sample_counts = sample_counts.reindex(sorted_bins).fillna(0)
-    
-    # --- Plot 1: Mean Accuracy ---
+
+    # Mean accuracy and moving average
     df_mean = df.copy()
     df_mean['mean_accuracy'] = df.mean(axis=1)
-    # Calculate moving average with a window of 3 (adjust window size as needed)
     window_size = 3
     df_mean['moving_avg'] = df_mean['mean_accuracy'].rolling(
-        window=window_size,
-        min_periods=1,
-        center=True
+        window=window_size, min_periods=1, center=True
     ).mean()
-    
+
     fig, ax1 = plt.subplots(figsize=(14, 7))
     x = range(len(df_mean.index))
-    
-    # Accuracy plot
-    ax1.scatter(x, df_mean['mean_accuracy'], color='darkblue', s=100, zorder=3, label='Mean Accuracy')
+
+    # Color by mean accuracy
+    colors = [greens_cmap(normalize(h)) for h in df_mean['mean_accuracy']]
+    ax1.scatter(x, df_mean['mean_accuracy'], color=colors, s=100, zorder=3, label='Mean Accuracy')
     ax1.plot(x, df_mean['mean_accuracy'], linestyle=':', color='gray', alpha=0.7)
-    ax1.plot(x, df_mean['moving_avg'], color='red', linewidth=2, label=f'{window_size}-bin Moving Average')
+    ax1.plot(x, df_mean['moving_avg'], color='#006d2c', linewidth=2, label=f'{window_size}-bin Moving Average')
 
     ax1.set_ylabel('Mean Accuracy (%)', fontsize=12)
-    ax1.set_ylim(0, 100)
+    ax1.set_ylim(70, 100)
     ax1.grid(axis='y', alpha=0.3)
-    
-    # Sample count plot
-    # ax2 = ax1.twinx()
-    # bars = ax2.bar(x, sample_counts, color='lightblue', alpha=0.6)
-    # ax2.set_ylabel('Number of Samples', fontsize=12)
-    
-    # Configure axes
+
     ax1.set_xticks(x)
     ax1.set_xticklabels(df_mean.index, rotation=45)
-    # Fix label alignment after rotation
     for label in ax1.get_xticklabels():
         label.set_ha('right')
-    
+
     ax1.set_title('Model Accuracy by Year', fontsize=14)
     ax1.set_xlabel('Year Range', fontsize=12)
-    ax1.legend(loc='best')  # Add legend
-    
-    # Add value labels
+    ax1.legend(loc='best')
+
     for i, acc in enumerate(df_mean['mean_accuracy']):
         ax1.text(x[i], acc + 1, f'{acc:.1f}%', ha='center', va='bottom', fontsize=9)
-        
-    # for bar in bars:
-    #     height = bar.get_height()
-    #     if height > 0:
-    #         ax2.text(bar.get_x() + bar.get_width()/2., height,
-    #                  f'{int(height)}', ha='center', va='bottom', fontsize=8)
-    
-    plt.ylim(70,105)
+
     plt.tight_layout()
-    plt.savefig(output_folder / 'years.png', format='png', dpi=300, bbox_inches='tight')
-    plt.savefig(output_folder / 'years.svg', format='svg', dpi=300, bbox_inches='tight')
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    for ext in ['png', 'svg']:
+        plt.savefig(output_folder / f'years.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
-    
-    # --- Plot 2: Individual Models ---
+
+    # Individual model plots
     models = df.columns.tolist()
     n_models = len(models)
-    
     if n_models == 0:
         return
-    
+
     fig, axes = plt.subplots(n_models, 1, figsize=(14, 4 * n_models))
     if n_models == 1:
         axes = [axes]
-    
-    for i, (model, ax) in enumerate(zip(models, axes)):
-        # Create twin axes for each subplot
+
+    for model, ax in zip(models, axes):
         ax1_sub = ax
         ax2_sub = ax.twinx()
-        
         x = range(len(df.index))
-        
-        # Model accuracy plot
-        ax1_sub.scatter(x, df[model], color='darkblue', s=60, zorder=3)
+
+        # Color by model accuracy
+        colors = [greens_cmap(normalize(h)) for h in df[model]]
+        ax1_sub.scatter(x, df[model], color=colors, s=60, zorder=3)
         ax1_sub.plot(x, df[model], linestyle=':', color='gray', alpha=0.7)
+
         ax1_sub.set_ylabel('Accuracy (%)', fontsize=10)
         ax1_sub.set_ylim(0, 105)
         ax1_sub.grid(axis='y', alpha=0.3)
-        
-        # Sample count plot (shared across all models)
-        bars = ax2_sub.bar(x, sample_counts, color='lightblue', alpha=0.4)
+
+        bars = ax2_sub.bar(x, sample_counts, color='#edf8e9', alpha=0.4)
         ax2_sub.set_ylabel('Samples', fontsize=9)
-        
-        # Configure axes
+
         ax1_sub.set_xticks(x)
-        if i == n_models - 1:
+        if model == models[-1]:
             ax1_sub.set_xticklabels(df.index, rotation=45)
-            # Fix label alignment after rotation
             for label in ax1_sub.get_xticklabels():
                 label.set_ha('right')
             ax1_sub.set_xlabel('Year Range', fontsize=10)
         else:
             ax1_sub.set_xticklabels([])
-        
-        # Add value labels
+
         for j, acc in enumerate(df[model]):
             ax1_sub.text(x[j], acc + 1, f'{acc:.1f}%', 
-                        ha='center', va='bottom', fontsize=8)
-            
-        # Add model title
+                         ha='center', va='bottom', fontsize=8)
+
         ax1_sub.set_title(f'Model: {model}', fontsize=11, pad=10)
-        
-        # Set tick label sizes
         ax1_sub.tick_params(axis='y', labelsize=8)
         ax2_sub.tick_params(axis='y', labelsize=8)
-    
+
     plt.tight_layout(rect=[0.03, 0.03, 1, 0.95])
     plt.suptitle('Model Accuracies and Sample Distribution by Year', fontsize=14, y=0.98)
-    plt.savefig(output_folder / 'years_models.png', format='png', dpi=300, bbox_inches='tight')
-    plt.savefig(output_folder / 'years_models.svg', format='svg', dpi=300, bbox_inches='tight')
+    for ext in ['png', 'svg']:
+        plt.savefig(output_folder / f'years_models.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
-
 
 def plot_lollipop_chart(data_path: str, model_colors: dict, output_folder: Path):
     # Load and process data
