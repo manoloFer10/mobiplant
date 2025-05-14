@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import squarify
+import plotly.express as px
 from pathlib import Path
 from matplotlib.lines import Line2D
 from matplotlib import patheffects
@@ -10,7 +12,16 @@ from matplotlib.patches import Patch
 from matplotlib.collections import LineCollection
 
 
-EVALUATION_STYLES = ['complete', 'automatic-metrics', 'human-metrics', 'statistics', 'experiments', 'automatic-plotting', 'human-plotting']
+EVALUATION_STYLES = [
+    'complete', 
+    'automatic-metrics', 
+    'human-metrics', 
+    'statistics', 
+    'statistics-plotting', 
+    'experiments', 
+    'automatic-plotting', 
+    'human-plotting'
+]
 
 
 def perform_complete_evaluation(df_dataset, output_folder):
@@ -482,15 +493,18 @@ def perform_descriptive_statistics(df_dataset, output_folder):
     os.makedirs(output_folder, exist_ok=True)
 
     # Frequency Tables
-    categorical_fields = ['normalized_area', 'normalized_plant_species'] 
+    categorical_fields = ['area', 'plant_species','normalized_area', 'normalized_plant_species'] 
     for field in categorical_fields:
-        if field in df_dataset.columns:
-            freq_table = df_dataset[field].value_counts().reset_index()
-            freq_table.columns = [field, 'counts']
-            freq_table['proportion'] = freq_table['counts'] / freq_table['counts'].sum()
-            freq_table = freq_table.round(2).astype(str)
-            
-            freq_table.to_csv(output_folder / f"{field}_frequency.csv", index=False)
+        try:
+            if field in df_dataset.columns:
+                freq_table = df_dataset[field].value_counts().reset_index()
+                freq_table.columns = [field, 'counts']
+                freq_table['proportion'] = freq_table['counts'] / freq_table['counts'].sum()
+                freq_table = freq_table.round(2).astype(str)
+                
+                freq_table.to_csv(output_folder / f"{field}_frequency.csv", index=False)
+        except Exception as e:
+            print(f"Error processing {field}: {e}")
 
 
     print(f"Overall statistics saved to folder: {output_folder}")
@@ -505,6 +519,185 @@ def calculate_distribution(df, column_name):
     distribution = distribution.round(2).astype(str)
     return distribution
 
+
+def get_colors(vals):
+    """Map a sequence of values to our green gradient."""
+    norm = mpl.colors.Normalize(vmin=min(vals), vmax=max(vals))
+    return [greens_cmap(norm(v)) for v in vals]
+
+def perform_statistics_plots(df_dataset, output_folder):
+    stats_folder = Path(output_folder) / 'plots' / 'statistics'
+    stats_folder.mkdir(parents=True, exist_ok=True)
+
+    # 1. Questions by Publication Year Bin
+    df_year = create_year_bins(df_dataset)
+    counts = df_year['year_bin'].value_counts().sort_index()
+    vals = counts.values
+    colors = get_colors(vals)
+
+    plt.figure(figsize=(8, 4))
+    bars = plt.bar(counts.index.astype(str), vals, color=colors, edgecolor='black')
+    plt.title('Questions by Publication Year Bin')
+    plt.xlabel('Year Range')
+    plt.ylabel('Number of Questions')
+    plt.xticks(rotation=45, ha='right')
+    for bar, cnt in zip(bars, vals):
+        plt.text(bar.get_x() + bar.get_width()/2, cnt, str(cnt),
+                 ha='center', va='bottom', fontsize=8)
+    plt.tight_layout()
+    plt.savefig(stats_folder / 'questions_by_year_bin.png', dpi=300, bbox_inches='tight')
+    plt.savefig(stats_folder / 'questions_by_year_bin.svg', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Year Bin stats saved to {stats_folder / 'questions_by_year_bin.png'}")
+
+    # 2. Questions by Citation Count Bin
+    df_cit = create_citation_bins(df_dataset)
+    bin_order = ["0", "1-10", "11-100", "101-500", "501-1000", "1001-1702"]
+    counts = df_cit['citation_bin'].value_counts().reindex(bin_order).fillna(0)
+    vals = counts.values
+    colors = get_colors(vals)
+
+    plt.figure(figsize=(8, 4))
+    bars = plt.bar(counts.index, vals, color=colors, edgecolor='black')
+    plt.title('Questions by Citation Count Bin')
+    plt.xlabel('Citation Range')
+    plt.ylabel('Number of Questions')
+    plt.xticks(rotation=45, ha='right')
+    for bar, cnt in zip(bars, vals):
+        if cnt > 0:
+            plt.text(bar.get_x() + bar.get_width()/2, cnt, str(cnt),
+                     ha='center', va='bottom', fontsize=8)
+    plt.tight_layout()
+    plt.savefig(stats_folder / 'questions_by_citation_bin.png', dpi=300, bbox_inches='tight')
+    plt.savefig(stats_folder / 'questions_by_citation_bin.svg', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    print(f"Citation stats saved to {stats_folder / 'questions_by_citation_bin.png'}")
+
+    # 3. Area Sunburst (no change in coloring logic; Plotly handles coloration)
+    # You can optionally pass a color sequence to Plotly but 
+    # we'll leave this as-is so it uses its default sunburst palette.
+    from plotly.offline import plot as plotly_plot
+    import plotly.graph_objects as go
+
+    df = df_dataset.copy()
+    
+    try:
+        # try the two‐level case
+        df[['primary','secondary']] = df['area'].str.split(' - ', n=1, expand=True)
+        df['secondary'] = df['secondary'].fillna(df['primary'])
+        
+        # aggregate counts per (primary, secondary)
+        agg = (
+            df
+            .groupby(['primary','secondary'], dropna=False)
+            .size()
+            .reset_index(name='count')
+        )
+        
+        fig = px.sunburst(
+            agg,
+            path=['primary','secondary'],
+            values='count',
+            title='Questions by Area'
+        )
+        
+    except Exception:
+        # fallback: only a single level
+        agg = (
+            df['area']
+            .value_counts()
+            .rename_axis('primary')
+            .reset_index(name='count')
+        )
+        
+        fig = px.sunburst(
+            agg,
+            path=['primary'],
+            values='count',
+            title='Questions by Area'
+        )
+
+    # show both name and count on each wedge
+    fig.update_traces(
+        branchvalues='total',
+        insidetextorientation='radial',
+        textinfo='label+value'
+    )
+    config = {
+        'toImageButtonOptions': {
+            'format': 'svg',       # force SVG output
+            'filename': 'questions_by_area_sunburst',
+            'width': 800,
+            'height': 600,
+            'scale': 1            # 1× size
+        },
+        'displaylogo': False,      # hide the Plotly logo
+    }
+
+    # 1) If you're in a notebook or interactive session:
+    fig.show(config=config)
+
+    # 4.Plant Species Distribution
+    palette = {
+        "Model Organisms":          "#1f77b4",
+        "Cereal Grains":            "#ff7f0e",
+        "Legumes":                  "#2ca02c",
+        "Solanaceae & Relatives":   "#d62728",
+        "Woody Perennials & Trees": "#9467bd",
+        "Other Herbaceous Crops, Spices, Fibers & Weeds": "#8c564b",
+        "Non-specific":             "#7f7f7f",
+    }
+
+    counts = df_dataset['normalized_plant_species'].value_counts()
+    labels = [f"{species}\n{count}" for species, count in zip(counts.index, counts.values)]
+    sizes  = counts.values
+    colors = [palette[group] for group in counts.index]
+
+    # set a light neutral background
+    plt.rcParams['figure.facecolor'] = 'whitesmoke'
+    plt.rcParams['font.family']     = 'DejaVu Sans'
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # draw treemap
+    squarify.plot(
+        sizes       = sizes,
+        label       = labels,
+        color       = colors,
+        alpha       = 0.85,                     # slight transparency
+        pad         = True,
+        bar_kwargs  = {
+            'linewidth': 2,                     # thicker white borders
+            'edgecolor': 'white',
+        },
+        text_kwargs = {
+            'fontsize'   : 12,
+            'fontweight' : 'bold',
+            'color'      : 'black',
+           # 'va'         : 'center',
+           # 'ha'         : 'center',
+            'wrap'       : True,                # long labels will wrap
+        }
+    )
+
+    # clean up
+    ax.axis('off')
+    plt.title(
+        'Distribution of Plant Species (Treemap)',
+        fontsize=16,
+        fontweight='semibold',
+        pad=20
+    )
+    plt.tight_layout()
+
+    # save
+    plt.savefig(stats_folder / 'plant_species_treemap_styled.png', dpi=300, bbox_inches='tight')
+    plt.savefig(stats_folder / 'plant_species_treemap_styled.svg', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    print(f"Plant species stats saved to {stats_folder / 'top_plant_species.png'}")
 
 def perform_experiments(df_dataset):
     raise NotImplementedError
@@ -537,10 +730,10 @@ def perform_automatic_plots(df_dataset, output_folder):
     if os.path.exists(origin_folder / 'metrics'):
         origin_folder = origin_folder / 'metrics'
         #generate_overall_spidergraph(origin_folder / 'normalized_area' / 'answer_accuracy.csv', 'area', output_folder )
-        plot_citation_bin_accuracy(origin_folder / 'citation_bin' / 'answer_accuracy.csv', output_folder)
+        plot_citation_bin_accuracy(origin_folder / 'citation_bin' / 'all_results.csv', output_folder)
         
         bin_df = create_year_bins(df_dataset)
-        plot_year_accuracy(origin_folder / 'year_bin' / 'answer_accuracy.csv', bin_df['year_bin'].value_counts(), output_folder)
+        plot_year_accuracy(origin_folder / 'year_bin' / 'all_results.csv', bin_df['year_bin'].value_counts(), output_folder)
 
         try:
             plot_lollipop_chart(origin_folder / 'normalized_area' / 'all_results.csv', MODEL_COLORS, output_folder)
@@ -561,30 +754,40 @@ greens_cmap = mpl.colors.LinearSegmentedColormap.from_list(
 )
 normalize = mpl.colors.Normalize(vmin=70, vmax=100)
 
+model_names_mapping = {
+        'llama': 'LLaMA',
+        'gemini': 'Gemini',
+        'claude': 'Claude',
+        'chatgpt': 'GPT-4o',
+        'o1-mini': 'O1-mini',
+        'v3': 'DeepSeek V3',
+        'r1': 'DeepSeek R1'
+    }
+
 def plot_citation_bin_accuracy(data_path, output_folder):
     df = pd.read_csv(data_path, index_col=0).drop('Overall', errors='ignore').drop('count', axis=1)
     bin_order = ['0', '1-10', '11-100', '101-500', '501-1000', '1001-1702']
     df = df.reindex(bin_order)
 
-    # Mean accuracy
-    df_mean = df.copy()
-    df_mean['mean_accuracy'] = df.mean(axis=1)
+    # Mean accuracy and std deviation across models
+    df_mean = df[[col for col in df.columns if col.endswith('_answer_accuracy_mean')]].mean(axis=1)
+    df_std = df[[col for col in df.columns if col.endswith('_answer_accuracy_std')]].mean(axis=1)
 
     plt.figure(figsize=(12, 6))
-    heights = df_mean['mean_accuracy']
+    heights = df_mean
+    errors = df_std
     colors = [greens_cmap(normalize(h)) for h in heights]
-    bars = plt.bar(df_mean.index, heights, color=colors)
+    bars = plt.bar(df_mean.index, heights, yerr=errors, capsize=5, color=colors)
 
     plt.title('Model Accuracy by Citation Count', fontweight='bold', fontsize=16)
     plt.xlabel('Number of citations', fontsize=12)
     plt.ylabel('Accuracy (%)', fontsize=12)
-    plt.ylim(70, 100)
+    plt.ylim(70, 105)
     plt.grid(axis='y', alpha=0.3)
 
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2, height,
-                 f'{height:.1f}%', ha='center', va='bottom')
+    for bar, height in zip(bars, heights):
+        plt.text(bar.get_x() + bar.get_width() / 4, height,
+                 f'{height:.1f}%', ha='center', va='bottom', fontsize=14)
 
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
@@ -595,7 +798,7 @@ def plot_citation_bin_accuracy(data_path, output_folder):
     plt.close()
 
     # Individual models
-    models = df.columns.tolist()
+    models = list(model_names_mapping.values())
     n_models = len(models)
     if n_models == 0:
         return
@@ -605,15 +808,15 @@ def plot_citation_bin_accuracy(data_path, output_folder):
         axes = [axes]
 
     for model, ax in zip(models, axes):
-        heights = df[model]
+        heights = df[f'{model}_answer_accuracy_mean']
+        errors = df[f'{model}_answer_accuracy_std']  
         colors = [greens_cmap(normalize(h)) for h in heights]
-        bars = ax.bar(df.index, heights, color=colors)
+        bars = ax.bar(df.index, heights, yerr=errors, capsize=3, color=colors)
         ax.set_title(f'Model: {model}', fontsize=10)
         ax.set_ylim(0, 105)
         ax.grid(axis='y', alpha=0.3)
 
-        for bar in bars:
-            height = bar.get_height()
+        for bar, height in zip(bars, heights):
             ax.text(bar.get_x() + bar.get_width() / 2, height,
                     f'{height:.1f}%', ha='center', va='bottom', fontsize=8)
 
@@ -630,12 +833,11 @@ def plot_citation_bin_accuracy(data_path, output_folder):
     fig.text(0.02, 0.5, 'Accuracy (%)', ha='center', va='center',
              rotation='vertical', fontsize=12)
 
-    plt.tight_layout(rect=[0.03, 0.03, 1, 0.95])
+    plt.tight_layout()
     plt.suptitle('Model Accuracies by Number of Citations', fontsize=14, y=0.98)
     for ext in ['png', 'svg']:
         plt.savefig(output_folder / f'citations_models.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
-
 
 def plot_year_accuracy(data_path, sample_counts, output_folder):
     df = pd.read_csv(data_path, index_col=0).drop('Overall', errors='ignore').drop('count', axis=1)
@@ -643,22 +845,21 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
     df = df.loc[sorted_bins]
     sample_counts = sample_counts.reindex(sorted_bins).fillna(0)
 
-    # Mean accuracy and moving average
-    df_mean = df.copy()
-    df_mean['mean_accuracy'] = df.mean(axis=1)
+    # Mean accuracy and std deviation
+    df_mean = df[[col for col in df.columns if col.endswith('_answer_accuracy_mean')]].mean(axis=1)
+    df_std = df[[col for col in df.columns if col.endswith('_answer_accuracy_std')]].mean(axis=1)
     window_size = 3
-    df_mean['moving_avg'] = df_mean['mean_accuracy'].rolling(
-        window=window_size, min_periods=1, center=True
-    ).mean()
+    moving_avg = df_mean.rolling(window=window_size, min_periods=1, center=True).mean()
 
     fig, ax1 = plt.subplots(figsize=(14, 7))
     x = range(len(df_mean.index))
 
-    # Color by mean accuracy
-    colors = [greens_cmap(normalize(h)) for h in df_mean['mean_accuracy']]
-    ax1.scatter(x, df_mean['mean_accuracy'], color=colors, s=100, zorder=3, label='Mean Accuracy')
-    ax1.plot(x, df_mean['mean_accuracy'], linestyle=':', color='gray', alpha=0.7)
-    ax1.plot(x, df_mean['moving_avg'], color='#006d2c', linewidth=2, label=f'{window_size}-bin Moving Average')
+    colors = [greens_cmap(normalize(h)) for h in df_mean]
+    ax1.errorbar(x, df_mean, yerr=df_std, fmt='o', color='black',
+                 ecolor='black', elinewidth=1, capsize=5, zorder=2, label='Mean Accuracy')
+    ax1.scatter(x, df_mean, color=colors, s=300, edgecolors= 'black', zorder=3)
+    ax1.plot(x, df_mean, linestyle=':', color='gray', alpha=0.7)
+    ax1.plot(x, moving_avg, color='#006d2c', linewidth=2, label=f'{window_size}-bin Moving Average')
 
     ax1.set_ylabel('Mean Accuracy (%)', fontsize=12)
     ax1.set_ylim(70, 100)
@@ -673,8 +874,8 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
     ax1.set_xlabel('Year Range', fontsize=12)
     ax1.legend(loc='best')
 
-    for i, acc in enumerate(df_mean['mean_accuracy']):
-        ax1.text(x[i], acc + 1, f'{acc:.1f}%', ha='center', va='bottom', fontsize=9)
+    for i, acc in enumerate(df_mean):
+        ax1.text(x[i], acc + 1, f'{acc:.1f}%', ha='center', va='bottom', fontsize=14)
 
     plt.tight_layout()
     output_folder = Path(output_folder)
@@ -684,7 +885,7 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
     plt.close()
 
     # Individual model plots
-    models = df.columns.tolist()
+    models = list(model_names_mapping.values())
     n_models = len(models)
     if n_models == 0:
         return
@@ -694,21 +895,20 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
         axes = [axes]
 
     for model, ax in zip(models, axes):
+        heights = df[f'{model}_answer_accuracy_mean']
+        errors = df[f'{model}_answer_accuracy_std'] 
         ax1_sub = ax
-        ax2_sub = ax.twinx()
         x = range(len(df.index))
 
-        # Color by model accuracy
-        colors = [greens_cmap(normalize(h)) for h in df[model]]
-        ax1_sub.scatter(x, df[model], color=colors, s=60, zorder=3)
-        ax1_sub.plot(x, df[model], linestyle=':', color='gray', alpha=0.7)
+        colors = [greens_cmap(normalize(h)) for h in heights]
+        ax1_sub.errorbar(x, heights, yerr=errors, fmt='o', color='black',
+                         ecolor='black', elinewidth=1, capsize=3, zorder=2)
+        ax1_sub.scatter(x, heights, color=colors, s=60, zorder=3)
+        ax1_sub.plot(x, heights, linestyle=':', color='gray', alpha=0.7)
 
         ax1_sub.set_ylabel('Accuracy (%)', fontsize=10)
-        ax1_sub.set_ylim(0, 105)
+        ax1_sub.set_ylim(45, 105)
         ax1_sub.grid(axis='y', alpha=0.3)
-
-        bars = ax2_sub.bar(x, sample_counts, color='#edf8e9', alpha=0.4)
-        ax2_sub.set_ylabel('Samples', fontsize=9)
 
         ax1_sub.set_xticks(x)
         if model == models[-1]:
@@ -719,13 +919,12 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
         else:
             ax1_sub.set_xticklabels([])
 
-        for j, acc in enumerate(df[model]):
+        for j, acc in enumerate(heights):
             ax1_sub.text(x[j], acc + 1, f'{acc:.1f}%', 
-                         ha='center', va='bottom', fontsize=8)
+                         ha='center', va='bottom', fontsize=14)
 
         ax1_sub.set_title(f'Model: {model}', fontsize=11, pad=10)
         ax1_sub.tick_params(axis='y', labelsize=8)
-        ax2_sub.tick_params(axis='y', labelsize=8)
 
     plt.tight_layout(rect=[0.03, 0.03, 1, 0.95])
     plt.suptitle('Model Accuracies and Sample Distribution by Year', fontsize=14, y=0.98)
@@ -937,7 +1136,7 @@ def plot_scatter_ranking_chart(data_path: str, model_colors: dict, output_folder
                  marker='o', zorder=3, label=model)
 
     # Customize axis
-    ax.set_ylim(60, 100)  # Set fixed y-axis range
+    ax.set_ylim(60, 105)  # Set fixed y-axis range
     ax.set_xticks(np.arange(len(areas)))
     ax.set_xticklabels(areas, rotation=45, ha='right', 
                       fontsize=10, weight='semibold')
