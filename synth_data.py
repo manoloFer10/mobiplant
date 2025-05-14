@@ -22,7 +22,7 @@ class Area(enum.Enum):
   EVOLUTION = 'EVOLUTION'
   BIOTECH = 'BIOTECHNOLOGY'
   ENVIRONMENT = 'ENVIRONMENT'
-  #NULL = None
+
 
 
 class MCQSchema(BaseModel):
@@ -54,13 +54,13 @@ Generate 5 independent multiple-choice questions (3 options each) from a publica
 
 Read the whole text to understand the work and carefully extract 5 distinct facts (e.g., conclusions, unique claims).
 If a fact involves a plant species, note its scientific name.
-Assign an area (must be one from, gene regulation, genome and genomics, cell biology and signaling, growth and development, hormones, physiology and metabolism, evolution, biotechnology or environment) if applicable; otherwise, use null.
+Assign an area (must be one from: gene regulation, genome and genomics, cell biology and signaling, growth and development, hormones, physiology and metabolism, evolution, biotechnology or environment) if applicable; otherwise, use null.
 
 - Craft Unique Questions:
 
 From the extracted facts, formulate questions that are clear, concise, and unambiguous:
     - The five resulting questions should be different from each other, resulting in a unique set of questions. 
-    - The questions should NOT be pointing to the study (examples not to follow: What happened in this study?, In the work done by XX, ... , Acording to the study/text ...). Instead, they should be phrased WITHOUT mentioning the document (e.g. What proteins have been identified as molecular partners of the Arabidopsis lncRNA ASCO?).
+    - The questions should NOT be pointing to the study (examples not to follow: What happened in this study?, In the work done by XX, ... , According to the study/text ...). Instead, they should be phrased WITHOUT mentioning the document (e.g. What proteins have been identified as molecular partners of the Arabidopsis lncRNA ASCO?).
     - The questions should not represent methods/techniques or specific experimental details (e.g. What is the relative timing of cell expansion versus cell division in ...,). Rather, they should focus on the MAIN CONCEPTS or CONCLUSIONS (e.g. What is the role of the lncRNA ASCO in Arabidopsis?, At which level does HYL1 regulate gene expression?).
 
 Note: For plant-related facts: Explicitly mention the species in the question (e.g., “What adaptation does Zea mays use to…?”).
@@ -79,7 +79,7 @@ For plant species: Use exact scientific names (e.g., "Oryza sativa").
 
 - Validate:
 
-Once chosen, carefully ensure questions are asked about specific conclusions or key concepts derived from the work. They should not be about methods or experimental details. They should be not referring to the text itself. Instead, should be direct.
+Once chosen, carefully ensure questions are asked about specific conclusions or key concepts derived from the work. They should not be about methods or experimental details. They should be not referring to the text itself. Instead, they should be direct.
 If any generated question does not meet the criteria, discard it and create a new one that does.
 Confirm plant_species is "non-specific" unless explicitly tied to a species.
 
