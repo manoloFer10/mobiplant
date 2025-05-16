@@ -67,9 +67,11 @@ def perform_metrics(df_dataset, output_folder):
 
     # Group by plant_species and calculate accuracies
     group_by_and_score(df_dataset, 'plant_species', model_names, output_folder)
+    group_by_and_score(df_dataset, 'normalized_plant_species', model_names, output_folder)
 
     # Group by area and calculate accuracies
     group_by_and_score(df_dataset, 'area', model_names, output_folder)
+    #group_by_and_score(df_dataset, 'normalized_area', model_names, output_folder)
 
     # Calculate accuracies by area and plant species for each model.
     # for model in model_names:
@@ -208,8 +210,8 @@ def create_year_bins(df):
     if not (2024-1994) % bin_len == 0:
         bins = list(range(1994, 2025, bin_len))
         labels = [f"{bins[i]}-{bins[i+1]-1}" for i in range(len(bins)-1)]
-        bins.append(2024)
-        labels.append(f"{bins[-2]}-{bins[-1]}")
+        bins.append(2026)
+        labels.append(f"{bins[-2]}-{bins[-1]-1}")
     else:
         bins = list(range(1994, 2025, bin_len))
         labels = [f"{bins[i]}-{bins[i+1]-1}" for i in range(len(bins)-2)]
@@ -226,8 +228,8 @@ def create_year_bins(df):
     ).astype(str)
     
     # Filter any residual invalid entries
-    valid_bins = set(labels)
-    df = df[df['year_bin'].isin(valid_bins)]
+    # valid_bins = set(labels)
+    # df = df[df['year_bin'].isin(valid_bins)]
     
     return df
 
