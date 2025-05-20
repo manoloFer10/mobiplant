@@ -13,7 +13,7 @@ from matplotlib.collections import LineCollection
 
 
 EVALUATION_STYLES = [
-    'complete', 
+    # 'complete', 
     'automatic-metrics', 
     'human-metrics', 
     'statistics', 
@@ -24,11 +24,11 @@ EVALUATION_STYLES = [
 ]
 
 
-def perform_complete_evaluation(df_dataset, output_folder):
+# def perform_complete_evaluation(df_dataset, output_folder):
 
-    perform_metrics(df_dataset, output_folder)
-    perform_descriptive_statistics(df_dataset)
-    print('not implemented yet: perform_experiments(df_dataset)')
+#     perform_metrics(df_dataset, output_folder)
+#     perform_descriptive_statistics(df_dataset)
+#     print('not implemented yet: perform_experiments(df_dataset)')
 
 def perform_metrics(df_dataset, output_folder):
 
@@ -46,15 +46,23 @@ def perform_metrics(df_dataset, output_folder):
     }
 
     model_columns = [col for col in df_dataset.columns if col.startswith('CoT_election_by_')]
-    model_names = [model_names_mapping[col.replace('CoT_election_by_', '')] for col in model_columns]
+    try:
+        
+        model_names = [model_names_mapping[col.replace('CoT_election_by_', '')] for col in model_columns]
+        scoring = 'synth'
+        print('Synthetic Dataset detected. Not scoring for shuffles.')
 
-    # clean_names = []
-    # for model in model_names:
-    #     suffix = model.split('_')[1]
-    #     name = model.split('_')[0]
-    #     clean_name = f'{model_names_mapping[name]}_{suffix}'
-    #     clean_names.append(clean_name)
-    # model_names = clean_names
+    except KeyError as e:
+        print('Expert Dataset detected. Scoring for shuffles.')
+        scoring = 'expert'
+        model_names = [col.replace('CoT_election_by_', '') for col in model_columns]
+        clean_names = []
+        for model in model_names:
+            suffix = model.split('_')[1]
+            name = model.split('_')[0]
+            clean_name = f'{model_names_mapping[name]}_{suffix}'
+            clean_names.append(clean_name)
+        model_names = clean_names
 
     df_dataset.rename(columns=dict(zip(model_columns, model_names)), inplace=True)
 
@@ -66,12 +74,15 @@ def perform_metrics(df_dataset, output_folder):
         df_dataset[model] = df_dataset[model].astype(pd.Int64Dtype())  # Allows integer NaN
 
     # Group by plant_species and calculate accuracies
-    group_by_and_score(df_dataset, 'plant_species', model_names, output_folder)
-    group_by_and_score(df_dataset, 'normalized_plant_species', model_names, output_folder)
+    group_by_and_score(df_dataset, 'plant_species', model_names, output_folder, scoring)
+    group_by_and_score(df_dataset, 'normalized_plant_species', model_names, output_folder, scoring)
 
     # Group by area and calculate accuracies
-    group_by_and_score(df_dataset, 'area', model_names, output_folder)
-    #group_by_and_score(df_dataset, 'normalized_area', model_names, output_folder)
+    group_by_and_score(df_dataset, 'area', model_names, output_folder, scoring)
+    try:
+        group_by_and_score(df_dataset, 'normalized_area', model_names, output_folder, scoring)
+    except Exception as e:
+        print(f"Error processing normalized_area: {e}. Synth results do not have this column!")
 
     # Calculate accuracies by area and plant species for each model.
     # for model in model_names:
@@ -89,16 +100,16 @@ def perform_metrics(df_dataset, output_folder):
 
     # Add Year and Citation binning
     df_dataset_year_binned = create_year_bins(df_dataset)
-    group_by_and_score(df_dataset_year_binned, 'year_bin', model_names, output_folder)
+    group_by_and_score(df_dataset_year_binned, 'year_bin', model_names, output_folder, scoring)
     
     df_dataset_citation_binned = create_citation_bins(df_dataset)
-    group_by_and_score(df_dataset_citation_binned, 'citation_bin', model_names, output_folder)
+    group_by_and_score(df_dataset_citation_binned, 'citation_bin', model_names, output_folder, scoring)
 
     create_answer_distribution_csv(df_dataset, model_names, output_folder / 'answer_distribution')
         
     print(f"Metrics results saved to: {output_folder}")
 
-def group_by_and_score(df_dataset, group, model_names, output_folder):
+def group_by_and_score(df_dataset, group, model_names, output_folder, scoring):
     VALID_VALUES = {0, 1, 2, 3}
     results = {}
 
@@ -111,9 +122,13 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
         metrics = {}
         total = len(subset)
         for model in model_names:
-            #suffix = model.split('_')[-1]
-            #answer_col = f'answer_{suffix}'
-            answer_col = f'answer'
+            if scoring == 'expert':
+                suffix = model.split('_')[-1]
+                answer_col = f'answer_{suffix}'
+            elif scoring == 'synth':
+                answer_col = f'answer'
+            else: 
+                raise ValueError(f"Unknown scoring type: {scoring}")
             
             valid_mask = subset[model].isin(VALID_VALUES)
             valid_count = valid_mask.sum()
@@ -141,10 +156,14 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
     overall_metrics = {}
     total_overall = len(df_dataset)
     for model in model_names:
-        #suffix = model.split('_')[-1]
-        #answer_col = f'answer_{suffix}'
-        answer_col = 'answer'
-        
+        if scoring == 'expert':
+            suffix = model.split('_')[-1]
+            answer_col = f'answer_{suffix}'
+        elif scoring == 'synth':
+            answer_col = 'answer'
+        else: 
+            raise ValueError(f"Unknown scoring type: {scoring}")
+
         valid_mask = df_dataset[model].isin(VALID_VALUES)
         valid_count = valid_mask.sum()
         error_count = total_overall - valid_count
@@ -171,8 +190,10 @@ def group_by_and_score(df_dataset, group, model_names, output_folder):
     
     for base_model in base_models:
         for metric in ['total_accuracy', 'answer_accuracy', 'error_rate']:
-            #run_columns = [f"{base_model}_{suffix}_{metric}" for suffix in ['first', 'second', 'third']]
-            run_columns = [f"{base_model}_{metric}"]
+            if scoring == 'expert':
+                run_columns = [f"{base_model}_{suffix}_{metric}" for suffix in ['first', 'second', 'third']]
+            elif scoring == 'synth':
+                run_columns = [f"{base_model}_{metric}"]
             if all(col in results_df.columns for col in run_columns):
                 mean_values = results_df[run_columns].mean(axis=1).round(1)
                 std_values = results_df[run_columns].std(axis=1).round(1)

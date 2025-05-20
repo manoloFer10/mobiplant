@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from eval_utils import (
     EVALUATION_STYLES,
-    perform_complete_evaluation,
+    #perform_complete_evaluation,
     perform_metrics,
     perform_human_metrics,
     perform_descriptive_statistics,
@@ -50,8 +50,8 @@ def run_evaluation(results, style, output_folder):
 
     os.makedirs(output_folder, exist_ok=True)
 
-    if style == 'complete':
-        perform_complete_evaluation(results, output_folder)
+    # if style == 'complete':
+    #     perform_complete_evaluation(results, output_folder)
     if style == 'automatic-metrics':
         perform_metrics(results, output_folder)
     if style == 'human-metrics':
