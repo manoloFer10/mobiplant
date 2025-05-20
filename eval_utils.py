@@ -773,7 +773,7 @@ def perform_automatic_plots(df_dataset, output_folder):
 
 
 greens_cmap = mpl.colors.LinearSegmentedColormap.from_list(
-    'greens', ['#edf8e9', '#74c476', '#006d2c']
+    'greens', ['#74c476', '#006d2c']
 )
 normalize = mpl.colors.Normalize(vmin=70, vmax=100)
 
@@ -840,7 +840,7 @@ def plot_citation_bin_accuracy(data_path, output_folder):
         ax.grid(axis='y', alpha=0.3)
 
         for bar, height in zip(bars, heights):
-            ax.text(bar.get_x() + bar.get_width() / 2, height,
+            ax.text(bar.get_x() + bar.get_width() / 4, height,
                     f'{height:.1f}%', ha='center', va='bottom', fontsize=8)
 
         if model == models[-1]:
@@ -985,16 +985,18 @@ def plot_lollipop_chart(data_path: str, model_colors: dict, output_folder: Path)
     for i, (acc, model, std) in enumerate(zip(data['Accuracy'], data['Model'], data['Std'])):
         color = model_colors.get(model, '#333333')  # Default to dark gray if unknown
         
-        # Horizontal line with subtle gradient
-        ax.hlines(y=i, xmin=0, xmax=acc, color=color, 
-                alpha=0.9, linewidth=4, linestyle='-')
+        # Horizontal line with subtle gradient, +- std
+        ax.hlines(y=i, xmin=acc - std, xmax=acc + std, color=color, linewidth=2.0, alpha=0.5)
+
+        # Marker to the left and right at std
+        ax.scatter(acc - std, i, s=200, color=color, linewidth=2.0, marker='|', zorder=10)
+        ax.scatter(acc + std, i, s=200, color=color, linewidth=2.0, marker='|', zorder=10)
         
         # Custom marker with white border
-        ax.scatter(acc, i, s=200, color=color, edgecolor='white',
-                 linewidth=1.5, marker='o', zorder=10)
+        ax.scatter(acc, i, s=100, color=color, linewidth=2.0, marker='o', zorder=10)
         
         # Smart label placement
-        label_x = acc + 2  # Offset from marker
+        label_x = acc + std + 1  # Offset from marker
         ha = 'left' if (100 - acc) > 10 else 'right'  # Flip if near edge
         if ha == 'right':
             label_x = acc - 2  # Left offset for edge cases
@@ -1013,9 +1015,9 @@ def plot_lollipop_chart(data_path: str, model_colors: dict, output_folder: Path)
     ax.set_xlabel('Accuracy (%)', fontsize=12, labelpad=15, weight='semibold')
     ax.set_title('Global Model Performance in APOLO Benchmark', 
                pad=20, fontsize=14, weight='bold')
-    ax.set_xlim(0, 100)
-    ax.xaxis.set_major_locator(plt.MultipleLocator(10))
-    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    ax.set_xlim(70, 100)
+    ax.xaxis.set_major_locator(plt.MultipleLocator(5))
+    #ax.grid(axis='x', linestyle='--', alpha=0.7)
     
     # Clean frame
     for spine in ['top', 'right', 'left']:
@@ -1082,7 +1084,7 @@ def plot_bump_chart(data_path: str, model_colors: dict, output_folder: Path):
         model_col = model_cols[models.index(model)]  # Get column name for scores
         scores = df[model_col].values  # Actual scores for this model
         for xi, yi, score in zip(x, y, scores):
-            ax.text(xi, yi - 0.15, 
+            ax.text(xi, yi - 0.25, 
                     f"{score:.1f}", 
                     ha='center', 
                     va='bottom', 
@@ -1100,6 +1102,9 @@ def plot_bump_chart(data_path: str, model_colors: dict, output_folder: Path):
     ax.set_yticklabels([f'Rank {i}' for i in range(1, len(models)+1)], 
                      fontsize=10)
     ax.grid(axis='y', linestyle='--', alpha=0.5)
+    ax.set_ylim(0.5, 7.5)
+    # invert y axis
+    ax.invert_yaxis()
     
     # Add legend with custom handles
     legend_handles = [Line2D([0], [0], marker='o', color=model_colors[model],
