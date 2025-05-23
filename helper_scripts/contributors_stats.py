@@ -4,6 +4,8 @@ import seaborn as sns
 from ast import literal_eval
 import numpy as np
 import matplotlib as mpl
+import geopandas as gpd
+import matplotlib.colors # Required for ListedColormap
 
 # Load your dataset
 df = pd.read_csv(r'data\contributors.csv')
@@ -13,8 +15,12 @@ df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
 age_clean = df['Age'].dropna()
 
 # Define the plant-green gradient
+# Original: greens_cmap = mpl.colors.LinearSegmentedColormap.from_list(
+#    'greens', ['#edf8e9', '#74c476', '#006d2c']
+# )
+# Adjusted for more intensity at the lower end:
 greens_cmap = mpl.colors.LinearSegmentedColormap.from_list(
-    'greens', ['#edf8e9', '#74c476', '#006d2c']
+    'greens', ['#c7e9c0', '#74c476', '#006d2c'] # Changed '#edf8e9' to '#c7e9c0'
 )
 
 def get_colors(vals):
@@ -113,6 +119,63 @@ plt.title("Contributors Countries of Residence", fontweight='bold')
 plt.xlabel('Count')
 plt.ylabel('Country')
 plt.tick_params(axis='y', labelsize=8)
+
+plt.tight_layout()
+plt.show()
+
+# Additional plot: Choropleth map for Country of Residence
+
+# Prepare country counts for merging
+# country_counts is already available from the previous section:
+# country_counts = df['Country of residence'].value_counts()
+country_counts_df = country_counts.reset_index()
+country_counts_df.columns = ['country_name', 'count']
+
+# Load a world map
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# Merge map data with country counts
+# Note: Country name discrepancies between your data and the map data might occur.
+# You may need to preprocess country_name or world.name for better matching.
+merged_map = world.merge(country_counts_df, left_on='name', right_on='country_name', how='left')
+
+# Fill NaN counts with 0 (for countries in the map but not in your data)
+merged_map['count'] = merged_map['count'].fillna(0)
+
+# Define bins and labels for the counts
+# Bins: 1-5, 6-10, 11-15, 16-20, 21+
+bins = [0, 5, 10, 15, 20, np.inf]
+labels = ['1-5', '6-10', '11-15', '16-20', '21+']
+
+# Apply binning
+# Countries with 0 counts will result in NaN here, and will be colored by 'missing_kwds'
+merged_map['count_bin'] = pd.cut(merged_map['count'],
+                                 bins=bins,
+                                 labels=labels,
+                                 right=True,
+                                 include_lowest=False) # Counts of 0 will not be included in '1-5'
+
+# Define colors for the bins using the existing greens_cmap
+# greens_cmap is already defined: mpl.colors.LinearSegmentedColormap.from_list('greens', ['#edf8e9', '#74c476', '#006d2c'])
+num_bins = len(labels)
+map_colors = [greens_cmap(i / max(1, num_bins - 1)) for i in range(num_bins)] # Get 5 colors from the cmap
+custom_cmap = matplotlib.colors.ListedColormap(map_colors)
+
+# Create the plot
+fig, ax = plt.subplots(1, 1, figsize=(20, 12))
+merged_map.plot(column='count_bin',
+                ax=ax,
+                legend=True,
+                categorical=True, # Treat 'count_bin' as categorical data for distinct colors
+                cmap=custom_cmap,
+                missing_kwds={
+                    "color": "lightgrey",
+                    # "label": "0 or No Data", # Removed this line
+                },
+                legend_kwds={'title': "Number of Contributors", 'loc': 'lower left'})
+
+ax.set_title('Contributors by Country of Residence', fontdict={'fontsize': 20, 'fontweight': 'bold'})
+ax.set_axis_off() # Remove axis ticks and labels
 
 plt.tight_layout()
 plt.show()
