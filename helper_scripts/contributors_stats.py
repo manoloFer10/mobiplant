@@ -8,7 +8,7 @@ import geopandas as gpd
 import matplotlib.colors # Required for ListedColormap
 
 # Load your dataset
-df = pd.read_csv(r'data\contributors.csv')
+df = pd.read_csv(r'data/contributors/contributors.csv')
 
 # Clean age column
 df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
@@ -102,32 +102,102 @@ plt.title("Contributors Nationalities", fontweight='bold')
 plt.xlabel('Count')
 plt.ylabel('Nationality')
 plt.tick_params(axis='y', labelsize=8)
-plt.tight_layout()
-
-# 4. Country of Residence
-plt.subplot(2, 2, 2)
-country_counts = df['Country of residence'].value_counts()
-
-vals = country_counts.values
-bar_colors = get_colors(vals)
-bars = plt.barh(country_counts.index, vals, color=bar_colors, edgecolor='black')
-for bar, cnt in zip(bars, vals):
-    plt.text(bar.get_width(), bar.get_y() + bar.get_height()/2,
-             str(int(cnt)), ha='left', va='center', fontsize=8)
-
-plt.title("Contributors Countries of Residence", fontweight='bold')
-plt.xlabel('Count')
-plt.ylabel('Country')
-plt.tick_params(axis='y', labelsize=8)
 
 plt.tight_layout()
 plt.show()
 
+# Load contributor areas data
+df_areas = pd.read_csv(r'data/contributors/contributors_areas.csv')
+
+# Remove existing Area and Sub-Area plots if this new plot replaces them
+# # Plot for Areas
+# plt.figure(figsize=(12, 8))
+# area_counts = df_areas['area'].value_counts()
+# area_bar_colors = get_colors(area_counts.values)
+# bars_area = plt.barh(area_counts.index, area_counts.values, color=area_bar_colors, edgecolor='black')
+# for bar, cnt in zip(bars_area, area_counts.values):
+#     plt.text(bar.get_width(), bar.get_y() + bar.get_height()/2,
+#              str(int(cnt)), ha='left', va='center', fontsize=8)
+# plt.title('Contributors by Area', fontweight='bold')
+# plt.xlabel('Count')
+# plt.ylabel('Area')
+# plt.gca().invert_yaxis() # To display the highest count at the top
+# plt.tight_layout()
+# plt.show()
+
+# # Plot for Sub-areas
+# plt.figure(figsize=(12, 10)) # Adjusted figure size for potentially more sub-areas
+# sub_area_counts = df_areas['sub-area'].value_counts()
+# sub_area_bar_colors = get_colors(sub_area_counts.values)
+# bars_sub_area = plt.barh(sub_area_counts.index, sub_area_counts.values, color=sub_area_bar_colors, edgecolor='black')
+# for bar, cnt in zip(bars_sub_area, sub_area_counts.values):
+#     plt.text(bar.get_width(), bar.get_y() + bar.get_height()/2,
+#              str(int(cnt)), ha='left', va='center', fontsize=8)
+# plt.title('Contributors by Sub-Area', fontweight='bold')
+# plt.xlabel('Count')
+# plt.ylabel('Sub-Area')
+# plt.gca().invert_yaxis() # To display the highest count at the top
+# plt.tight_layout()
+# plt.show()
+
+# New Sunburst chart for Areas and Sub-Areas
+import plotly.express as px
+
+if not df_areas.empty:
+    # Prepare data for sunburst: counts of sub-areas within areas
+    # Ensure 'area' and 'sub-area' are treated as strings to avoid issues with missing values being floats
+    df_areas_copy = df_areas.copy()
+    df_areas_copy['area'] = df_areas_copy['area'].astype(str)
+    
+    # Split 'area' by '-' and keep the first part
+    df_areas_copy['area'] = df_areas_copy['area'].apply(lambda x: x.split('-', 1)[0].strip())
+    
+    df_areas_copy['sub-area'] = df_areas_copy['sub-area'].astype(str)
+    
+    # Handle potential NaN or placeholder strings like 'nan' if they exist after conversion
+    df_areas_copy.replace('nan', 'N/A', inplace=True)
+
+
+    sunburst_data = df_areas_copy.groupby(['area', 'sub-area'], observed=False).size().reset_index(name='count')
+
+    # Define the custom Plotly continuous color scale from your greens_cmap
+    # greens_cmap is defined earlier as:
+    # mpl.colors.LinearSegmentedColormap.from_list('greens', ['c7e9c0', '#74c476', '#006d2c'])
+    plotly_greens_scale = [
+        [0.0, '#c7e9c0'],  # Start of your greens_cmap
+        [0.5, '#74c476'],  # Middle of your greens_cmap
+        [1.0, '#006d2c']   # End of your greens_cmap
+    ]
+
+    fig_sunburst = px.sunburst(sunburst_data,
+                               path=['area', 'sub-area'],
+                               values='count',
+                               color='count', # Color segments by their count
+                               color_continuous_scale=plotly_greens_scale,
+                               title='Contributors by Area and Sub-Area',
+                               hover_data={'count': True}) # Show count on hover
+
+    fig_sunburst.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+    config = {
+        'toImageButtonOptions': {
+            'format': 'svg',       # force SVG output
+            'filename': 'questions_by_area_sunburst',
+            'width': 800,
+            'height': 600,
+            'scale': 1            # 1× size
+        },
+        'displaylogo': False,      # hide the Plotly logo
+    }
+
+    # 1) If you're in a notebook or interactive session:
+    fig_sunburst.show(config=config)
+else:
+    print("Contributor areas data is empty. Skipping sunburst chart.")
+
 # Additional plot: Choropleth map for Country of Residence
 
 # Prepare country counts for merging
-# country_counts is already available from the previous section:
-# country_counts = df['Country of residence'].value_counts()
+country_counts = df['Country of residence'].value_counts()
 country_counts_df = country_counts.reset_index()
 country_counts_df.columns = ['country_name', 'count']
 
