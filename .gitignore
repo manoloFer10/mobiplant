@@ -1,4 +1,5 @@
 *.json
+*.csv
 data
 __pycache__
 full_results
