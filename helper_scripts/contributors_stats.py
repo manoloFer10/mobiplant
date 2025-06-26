@@ -9,6 +9,7 @@ import matplotlib.colors # Required for ListedColormap
 
 # Load your dataset
 df = pd.read_csv(r'data/contributors/contributors.csv')
+usage = pd.read_csv(r'data/contributors/llm_usage.csv')
 
 # Clean age column
 df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
@@ -23,17 +24,26 @@ greens_cmap = mpl.colors.LinearSegmentedColormap.from_list(
     'greens', ['#c7e9c0', '#74c476', '#006d2c'] # Changed '#edf8e9' to '#c7e9c0'
 )
 
-def get_colors(vals):
-    """Map a sequence of values to our green gradient."""
+# Define vanishing colormaps (white to color)
+cmap_blue_vanishing = mpl.colors.LinearSegmentedColormap.from_list('custom_blue_van', ['#FFFFFF', '#1f77b4'])
+cmap_orange_vanishing = mpl.colors.LinearSegmentedColormap.from_list('custom_orange_van', ['#FFFFFF', '#ff7f0e'])
+cmap_red_vanishing = mpl.colors.LinearSegmentedColormap.from_list('custom_red_van', ["#E08181", "#b70404"])
+cmap_purple_vanishing = mpl.colors.LinearSegmentedColormap.from_list('custom_purple_van', ["#cc9ef7", "#772ebb"])
+cmap_brown_vanishing = mpl.colors.LinearSegmentedColormap.from_list('custom_brown_van', ["#c59c92", "#A72006"]) # Unused
+
+def get_bar_colors_from_cmap(vals, cmap):
+    """Map a sequence of values to a given colormap for bar charts."""
+    if not len(vals) or max(vals) == min(vals): # Handle empty or all-same-value sequences
+        return [cmap(0.5)] * len(vals) # Return mid-color or adjust as needed
     norm = mpl.colors.Normalize(vmin=min(vals), vmax=max(vals))
-    return [greens_cmap(norm(v)) for v in vals]
+    return [cmap(norm(v)) for v in vals]
 
 # Set style
 sns.set_style("whitegrid")
-plt.figure(figsize=(18, 12))
 
 # 1. Age Distribution with 5-year bins
-plt.subplot(2, 2, 3)
+plt.figure(figsize=(10, 6)) # New figure for Age Distribution
+# plt.subplot(2, 2, 3) # Removed
 if not age_clean.empty:
     min_age = int(age_clean.min())
     max_age = int(age_clean.max())
@@ -42,7 +52,7 @@ if not age_clean.empty:
     bin_centers = edges[:-1] + np.diff(edges)/2
 
     # Use our gradient for the bars
-    bar_colors = get_colors(counts)
+    bar_colors = get_bar_colors_from_cmap(counts, cmap_blue_vanishing) # Use blue vanishing cmap
     bars = plt.bar(bin_centers, counts, width=np.diff(edges), color=bar_colors, edgecolor='black')
     for bar, cnt in zip(bars, counts):
         if cnt > 0:
@@ -59,9 +69,11 @@ plt.title('Age Distribution', fontweight='bold')
 plt.xlabel('Age Group')
 plt.ylabel('Count')
 plt.tight_layout()
+plt.show() # Show this plot
 
 # 2. Gender Identity Distribution
-plt.subplot(2, 2, 1)
+plt.figure(figsize=(10, 6)) # New figure for Gender Identity
+# plt.subplot(2, 2, 1) # Removed
 required = ['Cis Female','Cis Male','Trans Female','Trans Male','Not Binary','Agender','Prefer not to say']
 gender_counts = df['Gender identity'].value_counts().reindex(required, fill_value=0)
 others = [x for x in df['Gender identity'].unique() if x not in required and pd.notna(x)]
@@ -69,7 +81,7 @@ if others:
     gender_counts['Other'] = df['Gender identity'].isin(others).sum()
 
 vals = gender_counts.values
-bar_colors = get_colors(vals)
+bar_colors = get_bar_colors_from_cmap(vals, cmap_orange_vanishing) # Use orange vanishing cmap
 bars = plt.bar(gender_counts.index, vals, color=bar_colors, edgecolor='black')
 for bar, cnt in zip(bars, vals):
     if cnt > 0:
@@ -81,9 +93,11 @@ plt.xlabel('Gender Identity')
 plt.ylabel('Count')
 plt.xticks(rotation=22.5, ha='right')
 plt.tight_layout()
+plt.show() # Show this plot
 
 # 3. Nationality Analysis
-plt.subplot(2, 2, 4)
+plt.figure(figsize=(10, 8)) # New figure for Nationality Analysis
+# plt.subplot(2, 2, 4) # Removed
 try:
     df['Nationality/ies'] = df['Nationality/ies'].apply(literal_eval)
 except:
@@ -92,7 +106,7 @@ nationalities = df['Nationality/ies'].explode().str.strip().dropna()
 nat_counts = nationalities.value_counts()
 
 vals = nat_counts.values
-bar_colors = get_colors(vals)
+bar_colors = get_bar_colors_from_cmap(vals, cmap_brown_vanishing) # Use red vanishing cmap
 bars = plt.barh(nat_counts.index, vals, color=bar_colors, edgecolor='black')
 for bar, cnt in zip(bars, vals):
     plt.text(bar.get_width(), bar.get_y() + bar.get_height()/2,
@@ -104,7 +118,8 @@ plt.ylabel('Nationality')
 plt.tick_params(axis='y', labelsize=8)
 
 plt.tight_layout()
-plt.show()
+# plt.show() # Removed: was for the combined figure, now handled by individual plot shows
+plt.show() # Show this plot
 
 # Load contributor areas data
 df_areas = pd.read_csv(r'data/contributors/contributors_areas.csv')
@@ -163,10 +178,10 @@ if not df_areas.empty:
     # Define the custom Plotly continuous color scale from your greens_cmap
     # greens_cmap is defined earlier as:
     # mpl.colors.LinearSegmentedColormap.from_list('greens', ['c7e9c0', '#74c476', '#006d2c'])
-    plotly_greens_scale = [
-        [0.0, '#c7e9c0'],  # Start of your greens_cmap
-        [0.5, '#74c476'],  # Middle of your greens_cmap
-        [1.0, '#006d2c']   # End of your greens_cmap
+    plotly_greens_scale = [ # This uses the 'greens_cmap' as requested
+        [0.0, '#c7e9c0'],
+        [0.5, '#74c476'],
+        [1.0, '#006d2c']
     ]
 
     fig_sunburst = px.sunburst(sunburst_data,
@@ -225,19 +240,22 @@ merged_map['count_bin'] = pd.cut(merged_map['count'],
                                  right=True,
                                  include_lowest=False) # Counts of 0 will not be included in '1-5'
 
-# Define colors for the bins using the existing greens_cmap
+# Define colors for the bins using the new purple vanishing cmap
 # greens_cmap is already defined: mpl.colors.LinearSegmentedColormap.from_list('greens', ['#edf8e9', '#74c476', '#006d2c'])
 num_bins = len(labels)
-map_colors = [greens_cmap(i / max(1, num_bins - 1)) for i in range(num_bins)] # Get 5 colors from the cmap
-custom_cmap = matplotlib.colors.ListedColormap(map_colors)
+# map_colors = [greens_cmap(i / max(1, num_bins - 1)) for i in range(num_bins)] # Get 5 colors from the cmap
+# custom_cmap = matplotlib.colors.ListedColormap(map_colors)
+map_colors_purple = [cmap_purple_vanishing(i / max(1, num_bins - 1)) for i in range(num_bins)]
+custom_cmap_choropleth = matplotlib.colors.ListedColormap(map_colors_purple)
+
 
 # Create the plot
-fig, ax = plt.subplots(1, 1, figsize=(20, 12))
+fig, ax = plt.subplots(1, 1, figsize=(20, 12)) # This already creates a new figure
 merged_map.plot(column='count_bin',
                 ax=ax,
                 legend=True,
                 categorical=True, # Treat 'count_bin' as categorical data for distinct colors
-                cmap=custom_cmap,
+                cmap=custom_cmap_choropleth, # Use purple vanishing cmap for choropleth
                 missing_kwds={
                     "color": "lightgrey",
                     # "label": "0 or No Data", # Removed this line
@@ -249,3 +267,90 @@ ax.set_axis_off() # Remove axis ticks and labels
 
 plt.tight_layout()
 plt.show()
+
+# --- START OF NEW PLOTS ---
+
+# Define MODEL_COLORS (copied from eval_utils.py for standalone use here)
+MODEL_COLORS = {
+    'LLaMA': '#8B4513',
+    'Gemini': '#4285F4',
+    'Claude': '#FF6C0A',
+    'GPT-4o': '#10A37F',
+    'O1-mini': '#8FB339',
+    'DeepSeek V3': '#0B5E99',
+    'DeepSeek R1': '#003366',
+    'Other': '#808080'  # Grey for 'Other'
+}
+
+# 4. Preferred LLM Distribution (Unified Percentage Bar)
+plt.figure(figsize=(12, 2)) # Adjusted for a horizontal bar
+preferred_llm_counts = usage['prefered_llm'].value_counts()
+
+# Group small categories into 'Other'
+threshold = 2
+other_sum = preferred_llm_counts[preferred_llm_counts < threshold].sum()
+preferred_llm_processed_counts = preferred_llm_counts[preferred_llm_counts >= threshold]
+if other_sum > 0:
+    preferred_llm_processed_counts['Other'] = other_sum
+
+# Calculate percentages
+preferred_llm_percentages = (preferred_llm_processed_counts / preferred_llm_processed_counts.sum()) * 100
+
+# Plotting the unified bar
+left = 0
+for llm, percentage in preferred_llm_percentages.items():
+    color = MODEL_COLORS.get(llm, MODEL_COLORS['Other']) # Default to 'Other' color if not found
+    plt.barh('Preferred LLM', percentage, left=left, color=color, edgecolor='white', label=f'{llm} ({percentage:.1f}%)')
+    # Add text inside the bar
+    if percentage > 5: # Only add text if the segment is large enough
+        plt.text(left + percentage / 2, 0, f'{llm}\n{percentage:.1f}%',
+                 ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+    left += percentage
+
+plt.title('Preferred LLM Distribution', fontweight='bold')
+plt.xlabel('Percentage (%)')
+plt.yticks([]) # Hide y-axis ticks
+plt.xlim(0, 100)
+# plt.legend(loc='center left', bbox_to_anchor=(1, 0.5)) # Optional: if labels inside bars are not enough
+plt.tight_layout()
+plt.show()
+
+
+# 5. LLM Use Cases (Pie Chart)
+plt.figure(figsize=(10, 8))
+# Split comma-separated values and explode them into separate rows, then count
+use_cases = usage['use'].str.split(',\s*', regex=True).explode().str.strip().dropna()
+use_case_counts = use_cases.value_counts()
+
+# Define colors for pie chart (can use a predefined colormap or generate dynamically)
+# Using a subset of tab20 colors for variety if many categories
+if len(use_case_counts) <= 10:
+    colors = plt.cm.Paired(np.linspace(0, 1, len(use_case_counts)))
+else:
+    colors = plt.cm.tab20(np.linspace(0, 1, len(use_case_counts)))
+
+
+patches, texts, autotexts = plt.pie(use_case_counts,
+                                    labels=None, # Labels will be in legend
+                                    autopct='%1.1f%%',
+                                    startangle=140,
+                                    colors=colors,
+                                    pctdistance=0.85) # Distance of percentage text from center
+
+# Improve autotext text (percentages)
+for autotext in autotexts:
+    autotext.set_color('white')
+    autotext.set_fontweight('bold')
+    autotext.set_fontsize(8)
+
+
+plt.title('Distribution of LLM Use Cases', fontweight='bold')
+plt.axis('equal') # Equal aspect ratio ensures that pie is drawn as a circle.
+plt.legend(labels=[f'{label} ({count})' for label, count in use_case_counts.items()],
+           title="Use Cases",
+           loc="center left",
+           bbox_to_anchor=(1, 0, 0.5, 1))
+plt.tight_layout()
+plt.show()
+
+# --- END OF NEW PLOTS ---

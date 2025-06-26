@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from scipy.stats import pearsonr 
 
 MODEL_COLORS = {
     'LLaMA': '#8B4513',
@@ -71,6 +72,11 @@ def plot_hybrid_evaluation(human_scoring_csv, auto_scores_csv, output_path):
     # Filter only models present in both datasets
     merged_df = merged_df[merged_df['_merge'] == 'both'].drop(columns='_merge')
     
+    # Calculate Pearson correlation
+    correlation, p_value = pearsonr(merged_df['Human Score'], merged_df['Auto Score'])
+
+    print(f"Pearson correlation: {correlation:.2f}, p-value: {p_value:.2g}")
+    
     # Create figure
     plt.figure(figsize=(10, 8))
     
@@ -90,7 +96,7 @@ def plot_hybrid_evaluation(human_scoring_csv, auto_scores_csv, output_path):
     plt.plot([0, 100], [0, 100], linestyle='--', color='lightgray', linewidth=1.5)
     
     # Styling)
-    plt.title('Human vs Automatic Performance', fontsize=16, pad=20, fontweight='bold')
+    plt.title(f'Human vs Automatic Performance\nPearson Correlation: {correlation:.2f} (p={p_value:.2g})', fontsize=16, pad=20, fontweight='bold')
     plt.xlabel('Human Score (Average)')
     plt.ylabel('Automatic Accuracy')
     plt.xlim(40, 90)

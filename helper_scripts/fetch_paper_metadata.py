@@ -25,12 +25,14 @@ def query_crossref(doi):
             data = response.json().get('message', {})
             year = data.get('issued', {}).get('date-parts', [[None]])[0][0]
             citations = data.get('is-referenced-by-count', 0)
-            return year, citations
+            source_journal_list = data.get('container-title', [])
+            source_journal = source_journal_list[0] if source_journal_list else None
+            return year, citations, source_journal
         else:
-            return None, None
+            return None, None, None
     except Exception as e:
         print(f"Error querying DOI {doi}: {e}")
-        return None, None
+        return None, None, None
 
 
 def query_metadata(data, output_path):
@@ -40,7 +42,8 @@ def query_metadata(data, output_path):
         metadata = pd.Series({
             'doi': None,
             'Year': None,
-            'Citations': None
+            'Citations': None,
+            'source_journal': None
         })
 
         # Extract DOI from the source link if the link is human annotated
@@ -48,12 +51,13 @@ def query_metadata(data, output_path):
         dois = extract_doi(link)
         if dois != []:
             for doi in dois:
-                year, citations = query_crossref(doi)
+                year, citations, journal = query_crossref(doi)
                 if year or citations:
                     metadata = pd.Series({
                         'doi': doi,
                         'Year': year,
-                        'Citations': citations
+                        'Citations': citations,
+                        'source_journal': journal
                     })
                 else:
                     print(f'No references found for {doi}')
@@ -87,10 +91,10 @@ def main():
     # Load data
     # file_path = 'data/normalized.json'
     # data = pd.read_json(file_path)
-    file_path = 'data\synthetic_data/synth_questions.jsonl'
-    data = pd.read_json(file_path, lines=True)
+    file_path = 'data\expert_mobi.json'
+    data = pd.read_json(file_path)
 
-    output_path = 'data/doi/synth_processed_paper_data.json'
+    output_path = 'data/doi/journal_expertMoBi.json'
     query_metadata(data,output_path)
 
 
