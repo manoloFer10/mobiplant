@@ -1,9 +1,9 @@
 import argparse
 import json
 import re
-import os
 import pandas as pd
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor # Added import
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
@@ -15,6 +15,7 @@ SUPPORTED_MODELS = ['llama', 'chatgpt', 'o1-mini', 'gemini', 'claude', 'r1', 'v3
 
 TEMPERATURE = 0.7
 MAX_TOKENS = 4096
+MAX_API_WORKERS = 5 # Added max workers
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -225,12 +226,10 @@ def generateAnswers_long(df: pd.DataFrame,
                          restart_from:int, 
                          output_folder: str
                          ):
-
     output_path = Path(output_folder)
-
     parser = StrOutputParser()
 
-    chat_models= instantiate_models(
+    chat_models = instantiate_models(
         get_keys(), 
         models, 
         max_tokens=MAX_TOKENS, 
@@ -239,37 +238,53 @@ def generateAnswers_long(df: pd.DataFrame,
 
     system_message = "You are given a plant molecular biology question to answer. Respond concisely in one paragraph and provide a source (document title and link) for your answer."
 
-    for index, row in tqdm(df.iterrows(), total= len(df)):
+    def _task_long_form(chat_model_instance, current_prompt_obj, parser_instance, model_name_log, index_log):
+        raw_model_answer_content = "N/A"
+        try:
+            raw_model_response_obj = generate_answer_with_retry(chat_model_instance, current_prompt_obj)
+            if hasattr(raw_model_response_obj, 'content'):
+                raw_model_answer_content = raw_model_response_obj.content
+            model_answer = parser_instance.invoke(raw_model_response_obj)
+            return model_answer, None, model_name_log 
+        except Exception as e:
+            return raw_model_answer_content, e, model_name_log
 
-        if index < restart_from: continue
-        
-        question = row['question']
-        prompt = [
-            {
-                "role": "system",
-                "content": system_message,
-            },
-            {
-                "role": "user",
-                "content": question 
-            }
-        ]
-        for model_name, chat_model in chat_models.items():
-            prompt_ = prompt
-            if model_name == 'o1-mini': 
-                prompt_ = 'Respond concisely in one paragraph and provide a source (document title and link) for your answer.' + prompt[1]['content'] #due to o1 settings
+    with ThreadPoolExecutor(max_workers=MAX_API_WORKERS) as executor:
+        for index, row in tqdm(df.iterrows(), total=len(df)):
+            if index < restart_from:
+                continue
+            
+            question = row['question']
+            base_prompt_list = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": question}
+            ]
 
-            model_answer = parser.invoke(generate_answer_with_retry(chat_model, prompt_))
-            df.at[index, 'long_answer_by_' + model_name] = model_answer
+            futures = []
+            for model_name, chat_model in chat_models.items():
+                prompt_ = base_prompt_list
+                if model_name == 'o1-mini': 
+                    prompt_ = system_message + '\n' + base_prompt_list[1]['content']
+                
+                futures.append(executor.submit(_task_long_form, chat_model, prompt_, parser, model_name, index))
 
-        #save temp results on every iteration
-        save_results_to_csv(
-            data=df,
-            setting='long-temp',
-            models=models,
-            output_folder=output_path / 'temp'
-        )
+            for future in futures:
+                model_answer_or_raw_on_error, error, model_name_res = future.result()
+                if error:
+                    print(f'Error with {model_name_res} for long-form on row {index}: {str(error)}')
+                    print(f"  Raw response content on error: {model_answer_or_raw_on_error}")
+                    df.at[index, 'long_answer_by_' + model_name_res] = f"ERROR: {str(error)} - Raw: {model_answer_or_raw_on_error}"
+                else:
+                    df.at[index, 'long_answer_by_' + model_name_res] = model_answer_or_raw_on_error
 
+            if index % 50 == 0 or index == len(df) - 1 : # Save more frequently or at the end
+                save_results_to_json(
+                    data=df,
+                    setting='long-temp',
+                    models=models, # This should be list of model names processed so far or all models
+                    output_folder=output_path / 'temp'
+                )
+                print(f'Saved long-form temp results up to index: {index}')
     return df
 
 
@@ -299,43 +314,60 @@ def generateAnswers_mcq(df: pd.DataFrame,
 
     BASE_PROMPT = """Question:\n{question}\n\nOptions:\n{options}\nAnswer:"""
 
-    for index, row in tqdm(df.iterrows(), total= len(df)):
+    def _task_mcq(chat_model_instance, current_api_prompt_obj, parser_instance, answer_extractor_func, model_name_log, index_log, style_log):
+        raw_response_content_for_error = "N/A"
+        try:
+            response_obj = chat_model_instance.invoke(current_api_prompt_obj)
+            if hasattr(response_obj, 'content'):
+                raw_response_content_for_error = response_obj.content
+            
+            model_answer_text = parser_instance.invoke(response_obj)
+            extracted_answer = answer_extractor_func(model_answer_text)
+            return extracted_answer, model_answer_text, None, model_name_log 
+        except Exception as e:
+            return None, raw_response_content_for_error, e, model_name_log
 
-        if index < restart_from: continue
+    with ThreadPoolExecutor(max_workers=MAX_API_WORKERS) as executor:
+        for index, row in tqdm(df.iterrows(), total=len(df)):
+            if index < restart_from:
+                continue
 
-        question_text =  row['question']
-        for model_name, chat_model in chat_models.items():
-            try:
-                options_text = generate_options_format(row['options'])
-                content = BASE_PROMPT.format(question=question_text, options=options_text)
-               
-                if model_name in ['o1-mini', 'r1']: 
-                    prompt = system_message + '\n' + content #due to reasoning models requirements
+            question_text = row['question']
+            options_text = generate_options_format(row['options'])
+            content = BASE_PROMPT.format(question=question_text, options=options_text)
+            
+            futures = []
+            for model_name, chat_model in chat_models.items():
+                current_api_prompt = ""
+                if model_name in ['o1-mini', 'r1']: # due to reasoning models prompting constraints
+                    current_api_prompt = system_message + '\n' + content
                 else:
-                    prompt = [
+                    current_api_prompt = [
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": content}
                     ]
-
-                response = chat_model.invoke(prompt)
                 
-                model_answer = parser.invoke(response)
-                answer = answer_extractor(model_answer)
-                df.at[index, f'{style}_election_by_' + model_name] = answer
-                df.at[index, f'{style}_reasoning_by_' + model_name] = model_answer
+                futures.append(executor.submit(_task_mcq, chat_model, current_api_prompt, parser, answer_extractor, model_name, index, style))
 
-            except Exception as e:
-                print(f'Error with {model_name}: {str(e)}')
-                print(f"Raw response: {response.content if 'response' in locals() else ''}")
+            for future in futures:
+                extracted_answer, model_answer_text_or_raw_on_error, error, model_name_res = future.result()
+                if error:
+                    print(f'Error with {model_name_res} for MCQ ({style}) on row {index}: {str(error)}')
+                    print(f"  Raw response content on error: {model_answer_text_or_raw_on_error}")
+                    df.at[index, f'{style}_election_by_' + model_name_res] = "ERROR"
+                    df.at[index, f'{style}_reasoning_by_' + model_name_res] = f"ERROR: {str(error)} - Raw: {model_answer_text_or_raw_on_error}"
+                else:
+                    df.at[index, f'{style}_election_by_' + model_name_res] = extracted_answer
+                    df.at[index, f'{style}_reasoning_by_' + model_name_res] = model_answer_text_or_raw_on_error
         
-        if index % 50 == 0:
-            save_results_to_csv(
-                data=df,
-                setting=f'mcq-temp-{style}',
-                models=models,
-                output_folder=output_path / 'temp'
-            )
-            print(f'Saved until index: {index}, restart_from should be {index+1}')
+            if index % 50 == 0 or index == len(df) -1 :
+                save_results_to_json(
+                    data=df,
+                    setting=f'mcq-temp-{style}',
+                    models=models, # This should be list of model names
+                    output_folder=output_path / 'temp'
+                )
+                print(f'Saved MCQ temp results ({style}) until index: {index}')
     return df
 
 def filter_data_by_settings(data_path, 
@@ -371,7 +403,7 @@ def filter_data_by_settings(data_path,
     else:
         return data
     
-def save_results_to_csv(data: pd.DataFrame, setting, models, output_folder):
+def save_results_to_json(data: pd.DataFrame, setting, models, output_folder):
 
     output_folder = Path(output_folder / 'inference')
     ensure_dir(output_folder)
@@ -425,12 +457,12 @@ def run_answer_prediction(args):
         else: 
             raise ValueError(f'MCQ: Unexpected evaluation_style value: {args.evaluation_style}')
     elif args.setting == 'long-form-answering':
-        answers = generateAnswers_long(data, args.models, restart_from)    
+        answers = generateAnswers_long(data, args.models, restart_from, Path(args.results_dataset_path)) # Pass Path for output_folder   
     else:
         raise ValueError(f'unexpected value {args.setting} for an inference setting')
 
     #save answers
-    save_results_to_csv(answers, args.setting + f'_{args.evaluation_style}', args.models, Path(args.results_dataset_path))
+    save_results_to_json(answers, args.setting + f'_{args.evaluation_style}', args.models, Path(args.results_dataset_path))
 
 
 def main():
