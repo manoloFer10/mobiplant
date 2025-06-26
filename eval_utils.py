@@ -13,7 +13,6 @@ from matplotlib.collections import LineCollection
 
 
 EVALUATION_STYLES = [
-    # 'complete', 
     'automatic-metrics', 
     'human-metrics', 
     'statistics', 
@@ -76,7 +75,7 @@ def perform_metrics(df_dataset, output_folder):
     # Group by plant_species and calculate accuracies
     group_by_and_score(df_dataset, 'plant_species', model_names, output_folder, scoring)
     group_by_and_score(df_dataset, 'normalized_plant_species', model_names, output_folder, scoring)
-
+    group_by_and_score(df_dataset, 'source_journal', model_names, output_folder, scoring)
     # Group by area and calculate accuracies
     group_by_and_score(df_dataset, 'area', model_names, output_folder, scoring)
     try:
@@ -335,9 +334,13 @@ def create_answer_distribution_csv(df_dataset, model_names, output_folder):
         if answer_col in df_dataset.columns:
             gt_counts.update(compute_counts(df_dataset[answer_col]))
         else:
-            # If the answer column is missing, mark counts as "N/A".
-            for letter in letters:
-                gt_counts[f"{letter}"] = "N/A"
+            if suffix == '_first':
+                answer_col = 'answer'  # Fallback for first run.
+                gt_counts.update(compute_counts(df_dataset[answer_col]))
+            else:
+                # If the answer column is missing, mark counts as "N/A".
+                for letter in letters:
+                    gt_counts[f"{letter}"] = "N/A"
         distribution_results[f"ground_truth{suffix}"] = gt_counts
     
     # Process each model prediction: each base model uses columns like base+suffix.
@@ -598,6 +601,47 @@ def perform_statistics_plots(df_dataset, output_folder):
 
     print(f"Citation stats saved to {stats_folder / 'questions_by_citation_bin.png'}")
 
+    # New Plot: Citation Bins vs Year Bin Counts Heatmap
+    df_year_cit = create_year_bins(df_dataset)
+    df_year_cit = create_citation_bins(df_year_cit)
+
+    # Ensure 'year_bin' and 'citation_bin' are present
+    if 'year_bin' in df_year_cit.columns and 'citation_bin' in df_year_cit.columns:
+        contingency_table = pd.crosstab(df_year_cit['year_bin'], df_year_cit['citation_bin'])
+        
+        # Reorder citation bins for consistency
+        bin_order_cit = ["0", "1-10", "11-100", "101-500", "501-1000", "1001-1702"]
+        # Reorder year bins for consistency (assuming they are sorted by create_year_bins)
+        year_bin_order = sorted(df_year_cit['year_bin'].unique(), key=lambda x: int(x.split('-')[0]) if isinstance(x, str) and '-' in x else -1)
+
+        contingency_table = contingency_table.reindex(index=year_bin_order, columns=bin_order_cit).fillna(0)
+
+        plt.figure(figsize=(12, 8))
+        plt.imshow(contingency_table, cmap=greens_cmap, aspect='auto')
+        
+        plt.colorbar(label='Number of Questions')
+        plt.title('Question Counts: Citation Bins vs Year Bins', fontweight ='bold')
+        plt.xlabel('Citation Bin')
+        plt.ylabel('Year Bin')
+        
+        plt.xticks(ticks=np.arange(len(contingency_table.columns)), labels=contingency_table.columns, rotation=45, ha='right')
+        plt.yticks(ticks=np.arange(len(contingency_table.index)), labels=contingency_table.index)
+
+        # Add text annotations for counts
+        for i in range(len(contingency_table.index)):
+            for j in range(len(contingency_table.columns)):
+                text_color = "white" if contingency_table.iloc[i, j] > contingency_table.values.max() / 2 else "black"
+                plt.text(j, i, int(contingency_table.iloc[i, j]),
+                         ha="center", va="center", color=text_color, fontsize=8)
+        
+        plt.tight_layout()
+        plt.savefig(stats_folder / 'citation_vs_year_heatmap.png', dpi=300, bbox_inches='tight')
+        plt.savefig(stats_folder / 'citation_vs_year_heatmap.svg', dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Citation vs Year heatmap saved to {stats_folder / 'citation_vs_year_heatmap.png'}")
+    else:
+        print("Skipping Citation vs Year heatmap due to missing 'year_bin' or 'citation_bin' columns.")
+
     # 3. Area Sunburst (no change in coloring logic; Plotly handles coloration)
     # You can optionally pass a color sequence to Plotly but 
     # we'll leave this as-is so it uses its default sunburst palette.
@@ -773,7 +817,7 @@ def perform_automatic_plots(df_dataset, output_folder):
 
 
 greens_cmap = mpl.colors.LinearSegmentedColormap.from_list(
-    'greens', ['#74c476', '#006d2c']
+    'greens', ["#bdf3be", '#006d2c']
 )
 normalize = mpl.colors.Normalize(vmin=70, vmax=100)
 

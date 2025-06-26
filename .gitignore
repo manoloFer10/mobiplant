@@ -1,4 +1,4 @@
-tokens.json
+*.json
 data
 __pycache__
 full_results
@@ -11,3 +11,5 @@ superannotate_work/prepareditems
 superannotate_work/annotations
 *.ps1
 figures
+shuffle_bias
+helper_scripts
