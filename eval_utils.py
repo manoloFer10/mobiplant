@@ -10,6 +10,7 @@ from matplotlib.lines import Line2D
 from matplotlib import patheffects
 from matplotlib.patches import Patch
 from matplotlib.collections import LineCollection
+from scipy.stats import mannwhitneyu
 
 
 EVALUATION_STYLES = [
@@ -75,7 +76,7 @@ def perform_metrics(df_dataset, output_folder):
     # Group by plant_species and calculate accuracies
     group_by_and_score(df_dataset, 'plant_species', model_names, output_folder, scoring)
     group_by_and_score(df_dataset, 'normalized_plant_species', model_names, output_folder, scoring)
-    group_by_and_score(df_dataset, 'source_journal', model_names, output_folder, scoring)
+    #group_by_and_score(df_dataset, 'source_journal', model_names, output_folder, scoring)
     # Group by area and calculate accuracies
     group_by_and_score(df_dataset, 'area', model_names, output_folder, scoring)
     try:
@@ -551,6 +552,74 @@ def get_colors(vals):
     norm = mpl.colors.Normalize(vmin=min(vals), vmax=max(vals))
     return [greens_cmap(norm(v)) for v in vals]
 
+def plot_citation_distribution_by_journal_type(df_dataset, output_folder):
+    """Generates boxplots for citation counts of review vs. paper journals."""
+    
+    df = df_dataset.copy()
+    
+    # Ensure 'Citations' is numeric and drop any NaNs that result
+    df['Citations'] = pd.to_numeric(df['Citations'], errors='coerce')
+    df.dropna(subset=['Citations'], inplace=True)
+
+    # Define journal types
+    review_journals = ['TIPS', 'COPB']
+    
+    # Separate citation data
+    citations_reviews = df[df['source_journal'].isin(review_journals)]['Citations']
+    citations_papers = df[~df['source_journal'].isin(review_journals)]['Citations']
+    
+    # Perform Mann-Whitney U test to compare distributions
+    if not citations_reviews.empty and not citations_papers.empty:
+        u_statistic, p_value = mannwhitneyu(citations_reviews, citations_papers, alternative='two-sided')
+        print("\n--- Mann-Whitney U Test: Citations (Reviews vs. Papers) ---")
+        print(f"U-statistic: {u_statistic:.2f}")
+        print(f"P-value: {p_value:.4g}")
+        if p_value < 0.05:
+            print("Result: The p-value is less than 0.05.")
+        else:
+            print("Result: The p-value is not less than 0.05.")
+        print("-----------------------------------------------------------\n")
+
+    data_to_plot = [citations_papers, citations_reviews]
+    labels = ['Paper Journals', 'Review Journals']
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(8, 6))
+    fig.patch.set_facecolor('white')
+    
+    box = ax.boxplot(data_to_plot, 
+                     patch_artist=True,
+                     labels=labels)
+    
+    # Style the boxplots with green colors
+    colors = [greens_cmap(0.4), greens_cmap(0.8)]
+    for patch, color in zip(box['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.8)
+    
+    for median in box['medians']:
+        median.set_color('black')
+        median.set_linewidth(1.5)
+
+    # Customize plot
+    ax.set_yscale('log')
+    ax.set_title('Citation Distribution by Journal Type', fontsize=14, weight='bold', pad=20)
+    ax.set_ylabel('Number of Citations (log scale)', fontsize=12, weight='semibold')
+    ax.grid(axis='y', linestyle='--', alpha=0.6)
+    
+    for spine in ['top', 'right']:
+        ax.spines[spine].set_visible(False)
+        
+    plt.tight_layout()
+    
+    # Save outputs
+    for ext in ['png', 'svg']:
+        plt.savefig(output_folder / f"citation_distribution_by_journal_type.{ext}", format=ext, dpi=300, bbox_inches="tight")
+    plt.close()
+    
+    print(f"Citation distribution boxplot saved to: {output_folder / 'citation_distribution_by_journal_type.png'}")
+
+
 def perform_statistics_plots(df_dataset, output_folder):
     stats_folder = Path(output_folder) / 'plots' / 'statistics'
     stats_folder.mkdir(parents=True, exist_ok=True)
@@ -766,6 +835,9 @@ def perform_statistics_plots(df_dataset, output_folder):
 
     print(f"Plant species stats saved to {stats_folder / 'top_plant_species.png'}")
 
+    # New plot call for citation distribution by journal type
+    plot_citation_distribution_by_journal_type(df_dataset, stats_folder)
+
 def perform_experiments(df_dataset):
     raise NotImplementedError
 
@@ -801,6 +873,7 @@ def perform_automatic_plots(df_dataset, output_folder):
         
         bin_df = create_year_bins(df_dataset)
         plot_year_accuracy(origin_folder / 'year_bin' / 'all_results.csv', bin_df['year_bin'].value_counts(), output_folder)
+        plot_journal_type_accuracy(origin_folder / 'source_journal' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
 
         try:
             plot_lollipop_chart(origin_folder / 'normalized_area' / 'all_results.csv', MODEL_COLORS, output_folder)
@@ -998,6 +1071,94 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
     for ext in ['png', 'svg']:
         plt.savefig(output_folder / f'years_models.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
+
+def plot_journal_type_accuracy(data_path: str, model_colors: dict, output_folder: Path):
+    """Generates a grouped bar plot comparing model accuracy on review vs. paper journals."""
+    
+    # Load and process data
+    df = pd.read_csv(data_path, index_col=0)
+    df = df.drop('Overall', errors='ignore').drop('count', axis=1)
+    
+    # Define journal types
+    review_journals = ['TIPS', 'COPB']
+    
+    # Separate dataframes
+    df_reviews = df[df.index.isin(review_journals)]
+    df_papers = df[~df.index.isin(review_journals)]
+    
+    # Calculate mean accuracies
+    review_accuracies = df_reviews.mean()
+    paper_accuracies = df_papers.mean()
+    
+    # Prepare data for plotting
+    model_names = [col.replace('_answer_accuracy', '') for col in df.columns]
+    
+    plot_df = pd.DataFrame({
+        'Model': model_names,
+        'Reviews': review_accuracies.values,
+        'Papers': paper_accuracies.values
+    }).set_index('Model')
+
+    # Get colors for each model
+    colors = [model_colors.get(model, '#333333') for model in plot_df.index]
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(12, 7))
+    fig.patch.set_facecolor('white')
+    
+    x = np.arange(len(plot_df.index))
+    width = 0.35
+    
+    # Bar for reviews (hatched)
+    rects1 = ax.bar(x - width/2, plot_df['Reviews'], width, 
+                    color=colors, 
+                    hatch='//', edgecolor='black', linewidth=0.5)
+    
+    # Bar for papers (solid)
+    rects2 = ax.bar(x + width/2, plot_df['Papers'], width, 
+                    color=colors, 
+                    edgecolor='black', linewidth=0.5)
+    
+    # Customize plot
+    ax.set_ylabel('Accuracy (%)', fontsize=12, weight='semibold')
+    ax.set_title('Model Accuracy by Journal Type (Reviews vs. Papers)', 
+                 pad=20, fontsize=14, weight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(plot_df.index, rotation=45, ha='right', fontsize=10, weight='semibold')
+    ax.set_ylim(70, 105)
+    ax.grid(axis='y', linestyle='--', alpha=0.6)
+    
+    # Add data labels
+    for rect in rects1 + rects2:
+        height = rect.get_height()
+        ax.annotate(f'{height:.1f}',
+                    xy=(rect.get_x() + rect.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom', fontsize=9)
+    
+    # Custom legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='grey', edgecolor='black', hatch='//', label='Review Journals'),
+        Patch(facecolor='grey', edgecolor='black', label='Paper Journals')
+    ]
+    ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1, 1), frameon=True)
+    
+    for spine in ['top', 'right']:
+        ax.spines[spine].set_visible(False)
+        
+    plt.tight_layout()
+    
+    # Save outputs
+    output_path_svg = output_folder / "journal_type_accuracy.svg"
+    plt.savefig(output_path_svg, format='svg', bbox_inches="tight")
+    output_path_png = output_folder / "journal_type_accuracy.png"
+    plt.savefig(output_path_png, format='png', bbox_inches="tight")
+    plt.close()
+    
+    print(f"Journal type accuracy plot saved to: {output_path_svg}")
+
 
 def plot_lollipop_chart(data_path: str, model_colors: dict, output_folder: Path):
     # Load and process data
