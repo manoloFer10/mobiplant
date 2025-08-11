@@ -18,17 +18,10 @@ EVALUATION_STYLES = [
     'human-metrics', 
     'statistics', 
     'statistics-plotting', 
-    'experiments', 
     'automatic-plotting', 
     'human-plotting'
 ]
 
-
-# def perform_complete_evaluation(df_dataset, output_folder):
-
-#     perform_metrics(df_dataset, output_folder)
-#     perform_descriptive_statistics(df_dataset)
-#     print('not implemented yet: perform_experiments(df_dataset)')
 
 def perform_metrics(df_dataset, output_folder):
 
@@ -68,15 +61,13 @@ def perform_metrics(df_dataset, output_folder):
 
     # Preprocess model columns: convert to numeric and then to integers, invalid -> NaN
     for model in model_names:
-        # Convert to numeric, coercing errors to NaN
         df_dataset[model] = pd.to_numeric(df_dataset[model], errors='coerce')
-        # Convert to integer (NaN remains NaN)
         df_dataset[model] = df_dataset[model].astype(pd.Int64Dtype())  # Allows integer NaN
 
     # Group by plant_species and calculate accuracies
     group_by_and_score(df_dataset, 'plant_species', model_names, output_folder, scoring)
     group_by_and_score(df_dataset, 'normalized_plant_species', model_names, output_folder, scoring)
-    #group_by_and_score(df_dataset, 'source_journal', model_names, output_folder, scoring)
+    
     # Group by area and calculate accuracies
     group_by_and_score(df_dataset, 'area', model_names, output_folder, scoring)
     try:
@@ -84,23 +75,20 @@ def perform_metrics(df_dataset, output_folder):
     except Exception as e:
         print(f"Error processing normalized_area: {e}. Synth results do not have this column!")
 
-    # Calculate accuracies by area and plant species for each model.
-    # for model in model_names:
-    #     accuracy_df = df_dataset[model] == df_dataset['answer']
-
-    #     accuracies = (
-    #         accuracy_df.groupby([df_dataset['area'], df_dataset['plant_species']])
-    #         .mean()
-    #         .unstack(fill_value=0) 
-    #     )
-    #     os.makedirs(output_folder, exist_ok=True)
-    #     file_name = model + "_accuracy_species&area.csv"
-    #     output_file = os.path.join(output_folder, file_name)
-    #     accuracies.to_csv(output_file)
 
     # Add Year and Citation binning
     df_dataset_year_binned = create_year_bins(df_dataset)
     group_by_and_score(df_dataset_year_binned, 'year_bin', model_names, output_folder, scoring)
+    
+    # Add year binning by journal type for plotting
+    review_journals = ['TIPS', 'COPB']
+    df_reviews = df_dataset_year_binned[df_dataset_year_binned['source_journal'].isin(review_journals)]
+    df_papers = df_dataset_year_binned[~df_dataset_year_binned['source_journal'].isin(review_journals)]
+
+    if not df_reviews.empty:
+        group_by_and_score(df_reviews, 'year_bin', model_names, output_folder, scoring, subfolder_name='year_bin_reviews')
+    if not df_papers.empty:
+        group_by_and_score(df_papers, 'year_bin', model_names, output_folder, scoring, subfolder_name='year_bin_papers')
     
     df_dataset_citation_binned = create_citation_bins(df_dataset)
     group_by_and_score(df_dataset_citation_binned, 'citation_bin', model_names, output_folder, scoring)
@@ -109,7 +97,7 @@ def perform_metrics(df_dataset, output_folder):
         
     print(f"Metrics results saved to: {output_folder}")
 
-def group_by_and_score(df_dataset, group, model_names, output_folder, scoring):
+def group_by_and_score(df_dataset, group, model_names, output_folder, scoring, subfolder_name=None):
     VALID_VALUES = {0, 1, 2, 3}
     results = {}
 
@@ -202,7 +190,8 @@ def group_by_and_score(df_dataset, group, model_names, output_folder, scoring):
                 results_df = results_df.drop(columns=run_columns)
 
     # Save results to CSVs
-    group_folder = os.path.join(output_folder, group)
+    group_folder_name = subfolder_name if subfolder_name else group
+    group_folder = os.path.join(output_folder, group_folder_name)
     os.makedirs(group_folder, exist_ok=True)
     
     # Split into separate DataFrames for each metric type
@@ -248,11 +237,8 @@ def create_year_bins(df):
         include_lowest=True
     ).astype(str)
     
-    # Filter any residual invalid entries
-    # valid_bins = set(labels)
-    # df = df[df['year_bin'].isin(valid_bins)]
-    
     return df
+
 
 def create_citation_bins(df):
     df = df.copy()
@@ -546,7 +532,6 @@ def calculate_distribution(df, column_name):
     distribution = distribution.round(2).astype(str)
     return distribution
 
-
 def get_colors(vals):
     """Map a sequence of values to our green gradient."""
     norm = mpl.colors.Normalize(vmin=min(vals), vmax=max(vals))
@@ -838,9 +823,6 @@ def perform_statistics_plots(df_dataset, output_folder):
     # New plot call for citation distribution by journal type
     plot_citation_distribution_by_journal_type(df_dataset, stats_folder)
 
-def perform_experiments(df_dataset):
-    raise NotImplementedError
-
 def perform_automatic_plots(df_dataset, output_folder):
     origin_folder = output_folder
     output_folder = output_folder / 'plots'
@@ -856,15 +838,6 @@ def perform_automatic_plots(df_dataset, output_folder):
         'DeepSeek R1': '#003366'
     }
 
-    MODEL_COLORS  = {
-        'LLaMA': '#8B4513',
-        'Gemini': '#4285F4',
-        'Claude': '#FF6C0A',
-        'GPT-4o': '#10A37F',
-        'O1-mini': '#8FB339',
-        'DeepSeek V3': '#0B5E99',
-        'DeepSeek R1': '#003366'
-    }
 
     if os.path.exists(origin_folder / 'metrics'):
         origin_folder = origin_folder / 'metrics'
@@ -872,7 +845,13 @@ def perform_automatic_plots(df_dataset, output_folder):
         plot_citation_bin_accuracy(origin_folder / 'citation_bin' / 'all_results.csv', output_folder)
         
         bin_df = create_year_bins(df_dataset)
-        plot_year_accuracy(origin_folder / 'year_bin' / 'all_results.csv', bin_df['year_bin'].value_counts(), output_folder)
+        plot_year_accuracy(
+            data_path=origin_folder / 'year_bin' / 'all_results.csv',
+            reviews_data_path=origin_folder / 'year_bin_reviews' / 'all_results.csv',
+            papers_data_path=origin_folder / 'year_bin_papers' / 'all_results.csv',
+            sample_counts=bin_df['year_bin'].value_counts(), 
+            output_folder=output_folder
+        )
         plot_journal_type_accuracy(origin_folder / 'source_journal' / 'answer_accuracy.csv', MODEL_COLORS, output_folder)
 
         try:
@@ -979,52 +958,68 @@ def plot_citation_bin_accuracy(data_path, output_folder):
         plt.savefig(output_folder / f'citations_models.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
 
-def plot_year_accuracy(data_path, sample_counts, output_folder):
-    df = pd.read_csv(data_path, index_col=0).drop('Overall', errors='ignore').drop('count', axis=1)
-    sorted_bins = sorted(df.index, key=lambda x: int(x.split('-')[0]))
-    df = df.loc[sorted_bins]
-    sample_counts = sample_counts.reindex(sorted_bins).fillna(0)
+def plot_year_accuracy(data_path, reviews_data_path, papers_data_path, sample_counts, output_folder):
+    def load_accuracy_data(path):
+        if not Path(path).exists():
+            return None, None
+        try:
+            df = pd.read_csv(path, index_col=0).drop('Overall', errors='ignore').drop('count', axis=1)
+            df_mean = df[[col for col in df.columns if col.endswith('_answer_accuracy_mean')]].mean(axis=1)
+            return df, df_mean
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            return None, None
 
-    # Mean accuracy and std deviation
-    df_mean = df[[col for col in df.columns if col.endswith('_answer_accuracy_mean')]].mean(axis=1)
-    df_std = df[[col for col in df.columns if col.endswith('_answer_accuracy_std')]].mean(axis=1)
-    window_size = 3
-    moving_avg = df_mean.rolling(window=window_size, min_periods=1, center=True).mean()
+    # Load data for all, reviews, and papers
+    df_all, df_mean_all = load_accuracy_data(data_path)
+    _, df_mean_reviews = load_accuracy_data(reviews_data_path)
+    _, df_mean_papers = load_accuracy_data(papers_data_path)
 
+    if df_all is None or df_mean_all is None:
+        print(f"Could not find or process base data at {data_path}. Skipping year accuracy plot.")
+        return
+
+    sorted_bins = sorted(df_all.index, key=lambda x: int(str(x).split('-')[0]))
+    df_all = df_all.reindex(sorted_bins)
+    df_mean_all = df_mean_all.reindex(sorted_bins)
+    
+    if df_mean_reviews is not None:
+        df_mean_reviews = df_mean_reviews.reindex(sorted_bins, fill_value=np.nan)
+    if df_mean_papers is not None:
+        df_mean_papers = df_mean_papers.reindex(sorted_bins, fill_value=np.nan)
+
+    # Main plot with 3 lines
     fig, ax1 = plt.subplots(figsize=(14, 7))
-    x = range(len(df_mean.index))
+    x = np.arange(len(df_mean_all.index))
 
-    colors = [greens_cmap(normalize(h)) for h in df_mean]
-    ax1.errorbar(x, df_mean, yerr=df_std, fmt='o', color='black',
-                 ecolor='black', elinewidth=1, capsize=5, zorder=2, label='Mean Accuracy')
-    ax1.scatter(x, df_mean, color=colors, s=300, edgecolors= 'black', zorder=3)
-    ax1.plot(x, df_mean, linestyle=':', color='gray', alpha=0.7)
-    ax1.plot(x, moving_avg, color='#006d2c', linewidth=2, label=f'{window_size}-bin Moving Average')
+    # Plotting the lines
+    ax1.plot(x, df_mean_all, 'o-', color='black', linewidth=2.5, label='Overall Mean Accuracy', zorder=5)
+    if df_mean_reviews is not None:
+        ax1.plot(x, df_mean_reviews, '^-', color='#006d2c', linestyle='--', linewidth=2, label='Review Journals Mean Accuracy', zorder=4)
+    if df_mean_papers is not None:
+        ax1.plot(x, df_mean_papers, 's-', color='#8B4513', linestyle=':', linewidth=2, label='Paper Journals Mean Accuracy', zorder=3)
 
     ax1.set_ylabel('Mean Accuracy (%)', fontsize=12)
     ax1.set_ylim(70, 100)
     ax1.grid(axis='y', alpha=0.3)
-
     ax1.set_xticks(x)
-    ax1.set_xticklabels(df_mean.index, rotation=45)
-    for label in ax1.get_xticklabels():
-        label.set_ha('right')
-
-    ax1.set_title('Model Accuracy by Year', fontsize=14)
+    ax1.set_xticklabels(df_mean_all.index, rotation=45, ha='right')
+    ax1.set_title('Model Accuracy by Year and Journal Type', fontsize=14, weight='bold')
     ax1.set_xlabel('Year Range', fontsize=12)
     ax1.legend(loc='best')
 
-    for i, acc in enumerate(df_mean):
-        ax1.text(x[i], acc + 1, f'{acc:.1f}%', ha='center', va='bottom', fontsize=14)
+    # Add text labels for the main line
+    for i, acc in enumerate(df_mean_all):
+        if pd.notna(acc):
+            ax1.text(x[i], acc + 0.5, f'{acc:.1f}%', ha='center', va='bottom', fontsize=10)
 
     plt.tight_layout()
     output_folder = Path(output_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
     for ext in ['png', 'svg']:
-        plt.savefig(output_folder / f'years.{ext}', format=ext, dpi=300, bbox_inches='tight')
+        plt.savefig(output_folder / f'years_by_journal_type.{ext}', format=ext, dpi=300, bbox_inches='tight')
     plt.close()
 
-    # Individual model plots
+    # Individual model plots (using df_all)
     models = list(model_names_mapping.values())
     n_models = len(models)
     if n_models == 0:
@@ -1035,36 +1030,34 @@ def plot_year_accuracy(data_path, sample_counts, output_folder):
         axes = [axes]
 
     for model, ax in zip(models, axes):
-        heights = df[f'{model}_answer_accuracy_mean']
-        errors = df[f'{model}_answer_accuracy_std'] 
-        ax1_sub = ax
-        x = range(len(df.index))
+        heights = df_all[f'{model}_answer_accuracy_mean']
+        errors = df_all[f'{model}_answer_accuracy_std'] 
+        x_sub = np.arange(len(df_all.index))
 
         colors = [greens_cmap(normalize(h)) for h in heights]
-        ax1_sub.errorbar(x, heights, yerr=errors, fmt='o', color='black',
+        ax.errorbar(x_sub, heights, yerr=errors, fmt='o', color='black',
                          ecolor='black', elinewidth=1, capsize=3, zorder=2)
-        ax1_sub.scatter(x, heights, color=colors, s=60, zorder=3)
-        ax1_sub.plot(x, heights, linestyle=':', color='gray', alpha=0.7)
+        ax.scatter(x_sub, heights, color=colors, s=60, zorder=3)
+        ax.plot(x_sub, heights, linestyle=':', color='gray', alpha=0.7)
 
-        ax1_sub.set_ylabel('Accuracy (%)', fontsize=10)
-        ax1_sub.set_ylim(45, 105)
-        ax1_sub.grid(axis='y', alpha=0.3)
+        ax.set_ylabel('Accuracy (%)', fontsize=10)
+        ax.set_ylim(45, 105)
+        ax.grid(axis='y', alpha=0.3)
 
-        ax1_sub.set_xticks(x)
+        ax.set_xticks(x_sub)
         if model == models[-1]:
-            ax1_sub.set_xticklabels(df.index, rotation=45)
-            for label in ax1_sub.get_xticklabels():
-                label.set_ha('right')
-            ax1_sub.set_xlabel('Year Range', fontsize=10)
+            ax.set_xticklabels(df_all.index, rotation=45, ha='right')
+            ax.set_xlabel('Year Range', fontsize=10)
         else:
-            ax1_sub.set_xticklabels([])
+            ax.set_xticklabels([])
 
         for j, acc in enumerate(heights):
-            ax1_sub.text(x[j], acc + 1, f'{acc:.1f}%', 
-                         ha='center', va='bottom', fontsize=14)
+            if pd.notna(acc):
+                ax.text(x_sub[j], acc + 1, f'{acc:.1f}%', 
+                             ha='center', va='bottom', fontsize=14)
 
-        ax1_sub.set_title(f'Model: {model}', fontsize=11, pad=10)
-        ax1_sub.tick_params(axis='y', labelsize=8)
+        ax.set_title(f'Model: {model}', fontsize=11, pad=10)
+        ax.tick_params(axis='y', labelsize=8)
 
     plt.tight_layout(rect=[0.03, 0.03, 1, 0.95])
     plt.suptitle('Model Accuracies and Sample Distribution by Year', fontsize=14, y=0.98)
