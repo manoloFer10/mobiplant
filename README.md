@@ -26,9 +26,9 @@ This repository provides tools for evaluating and benchmarking large language mo
        "chatgpt": "YOUR_OPENAI_KEY",
        "claude": "YOUR_ANTHROPIC_KEY",
        "llama": "YOUR_LLAMA_KEY",
-       "o1-mini": "YOUR_O1MINI_KEY",
-       "v3": "YOUR_DEEPSEEK_V3_KEY",
-       "r1": "YOUR_DEEPSEEK_R1_KEY"
+       "o1-mini": "YOUR_OPENAI_KEY",
+       "v3": "YOUR_DEEPSEEK_KEY",
+       "r1": "YOUR_DEEPSEEK_KEY"
      }
      ```
      *Only these models are supported for evaluation. If you want to include others, you may have to change how models are initialized in predict_answers.py*.
