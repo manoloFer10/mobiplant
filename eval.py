@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument(
         "--num_samples",
         type=str,
-        default="3",
+        default="all",
         help="number of samples to evaluate",
     )
     parser.add_argument(

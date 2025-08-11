@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from tqdm import tqdm
 from tenacity import retry, stop_after_attempt, wait_exponential
+from datasets import load_dataset
 
 SUPPORTED_MODELS = ['llama', 'chatgpt', 'o1-mini', 'gemini', 'claude', 'r1', 'v3']
 
@@ -46,6 +47,7 @@ def parse_args():
         "--whos",
         nargs="+",  # Accepts one or more values as a list
         required=True,
+        default= 'everyone',
         help="list of emails (provide as space-separated values)",
     )
     # For --results_dataset_path (list of strings)
@@ -64,6 +66,7 @@ def parse_args():
         "--num_samples",
         type=str,  
         required=True,
+        default='all',
         help="samples to evaluate",
     )
     parser.add_argument(
@@ -375,12 +378,7 @@ def filter_data_by_settings(data_path,
                             num_samples, 
                             restart_from, 
                             restart_path):
-    data_path = Path(data_path)
-
-    try:
-        data = pd.read_json(data_path)
-    except:
-        data = pd.read_json(data_path, lines=True) 
+    data = load_dataset(data_path)['train'].to_pandas() 
     
     if num_samples != 'all':
         data = data.sample(n=int(num_samples))
