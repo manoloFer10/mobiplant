@@ -83,5 +83,3 @@ python eval.py \
 If you use this codebase, please cite the corresponding publication *wip*.
 
 ---
-
-For more details, see the docstrings in each script or open an issue
