@@ -1,11 +1,9 @@
-# LLMs-in-PMB
+# MoBiPlant
 
 [![bioRxiv](https://img.shields.io/badge/bioRxiv-2025.08.31.672925-b31b1b.svg)](https://www.biorxiv.org/content/early/2025/09/04/2025.08.31.672925)
 [![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-manufernandezbur%2FMoBiPlant-yellow)](https://huggingface.co/datasets/manufernandezbur/MoBiPlant)
 
-
-
-This repository provides tools for evaluating and benchmarking large language models (LLMs) on plant molecular biology (PMB) question answering tasks. It supports both multiple-choice (MCQ) and long-form answer generation, as well as human and automatic evaluation, data preprocessing, and figure creation for analysis.
+This repository provides tools for evaluating and benchmarking large language models (LLMs) on the **MoBiPlant benchmark🌱**: PhD-level plant molecular biology questions from researchers all over the globe. 
 
 
 ## Installation
