@@ -8,9 +8,9 @@ This repository provides tools for evaluating and benchmarking large language mo
 
 ## Installation
 
-1. **Clone the repository:** (anonymous submission!)
+1. **Clone the repository:** 
    ```sh
-   git clone -----
+   git clone https://github.com/manoloFer10/mobiplant
    cd mobiplant
    ```
 
