@@ -176,7 +176,7 @@ def instantiate_models(keys: dict,
                 max_retries=2,
                 timeout=None,
                 api_key=keys[model],
-                thinking={"type":"adaptive", "effort":"low"}
+                thinking={"type": "enabled", "budget_tokens": 4000, "effort":"low"}
             )
             if with_search:
                 replier = replier.bind_tools([
