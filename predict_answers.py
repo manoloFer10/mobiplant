@@ -1,6 +1,7 @@
 import argparse
 import json
 import re
+import os
 import pandas as pd
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor # Added import
@@ -89,8 +90,17 @@ def parse_args():
 
 def get_keys():
     keys_path = Path('tokens.json')
-    with keys_path.open('r', encoding='utf-8') as f:
-        keys = json.load(f)
+    if keys_path.exists():
+        with keys_path.open('r', encoding='utf-8') as f:
+            keys = json.load(f)
+    else:
+        # try environment keys
+        openai_key = os.environ.get('OPENAI_KEY')
+        anthropic_key = os.environ.get('ANTHROPIC_KEY')
+        keys = {
+            'gpt-5.2': openai_key,
+            'sonnet-4.6': anthropic_key
+        }
     return keys
 
 def ensure_dir(path: Path):
