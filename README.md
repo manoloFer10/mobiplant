@@ -1,12 +1,16 @@
 # MoBiPlant
 
+[![bioRxiv](https://img.shields.io/badge/bioRxiv-2025.08.31.672925-b31b1b.svg)](https://www.biorxiv.org/content/early/2025/09/04/2025.08.31.672925)
+[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-manufernandezbur%2FMoBiPlant-yellow)](https://huggingface.co/datasets/manufernandezbur/MoBiPlant)
+
 This repository provides tools for evaluating and benchmarking large language models (LLMs) on the **MoBiPlant benchmark🌱**: PhD-level plant molecular biology questions from researchers all over the globe. 
+
 
 ## Installation
 
-1. **Clone the repository:**
+1. **Clone the repository:** 
    ```sh
-   git clone https://github.com/manolofer10/mobiplant.git
+   git clone https://github.com/manoloFer10/mobiplant
    cd mobiplant
    ```
 
@@ -44,7 +48,7 @@ The main entry point is `predict_answers.py`. This script runs inference with se
 
 ```sh
 python predict_answers.py \
-  --data_path manufernandezbur/MoBiPlant \
+  --data_path anonymousSub10/mobiplant \
   --models model_name \ 
   --setting mcq-answering \ #for mcq answering
   --results_dataset_path where_to_save_results \ #will save as json
@@ -61,7 +65,7 @@ python predict_answers.py \
 
 ```sh
 python predict_answers.py \
-  --data_path manufernandezbur/MoBiPlant \
+  --data_path anonymousSub10/mobiplant \
   --models model_name \
   --setting long-form-answering \
   --results_dataset_path where_to_save_results \
@@ -80,8 +84,19 @@ python eval.py \
 
 ## Citation
 
-If you use this codebase, please cite the corresponding publication *wip*.
+If you use this repository, please cite:
 
----
+````bibtex
+@article {Fernandez Burda2025.08.31.672925,
+    author = {Fernandez Burda, Manuel and Ferrero, Lucia and Gaggion, Nicol{\'a}s and Fonouni-Farde, Camille and The MoBiPlant Consortium and Crespi, Mart{\'\i}n and Ariel, Federico and Ferrante, Enzo},
+    title = {What Large Language Models Know About Plant Molecular Biology},
+    elocation-id = {2025.08.31.672925},
+    year = {2025},
+    doi = {10.1101/2025.08.31.672925},
+    abstract = {Large language models (LLMs) are rapidly permeating scientific research, yet their capabilities in plant molecular biology remain largely uncharacterized. Here, we present MoBiPlant, the first comprehensive benchmark for evaluating LLMs in this domain, developed by a consortium of 112 plant scientists across 19 countries. MoBiPlant comprises 565 expert-curated multiple-choice questions and 1,075 synthetically generated questions, spanning core topics from gene regulation to plant-environment interactions. We benchmarked seven leading chat-based LLMs using both automated scoring and human evaluation of open-ended answers. Models performed well on multiple-choice tasks (exceeding 75% accuracy), although most of them exhibited a consistent bias towards option A. In contrast, expert reviews exposed persistent limitations, including factual misalignment, hallucinations, and low self-awareness. Critically, we found that model performance strongly correlated with the citation frequency of source literature, suggesting that LLMs do not simply encode plant biology knowledge uniformly, but are instead shaped by the visibility and frequency of information in their training corpora. This understanding is key to guiding both the development of next-generation models and the informed use of current tools in the everyday work of plant researchers. MoBiPlant is publicly available online in this link.Competing Interest StatementThe authors have declared no competing interest.},
+    URL = {https://www.biorxiv.org/content/early/2025/09/04/2025.08.31.672925},
+    eprint = {https://www.biorxiv.org/content/early/2025/09/04/2025.08.31.672925.full.pdf},
+    journal = {bioRxiv}
+}
+````
 
-For more details, see the docstrings in each script or open an issue
