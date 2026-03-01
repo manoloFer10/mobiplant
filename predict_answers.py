@@ -16,8 +16,8 @@ from datasets import load_dataset
 SUPPORTED_MODELS = ['llama', 'chatgpt', "gpt-5.2", 'o1-mini', 'gemini', 'claude', "sonnet-4.6", 'r1', 'v3']
 
 TEMPERATURE = 0.7
-MAX_TOKENS = 4096
-MAX_API_WORKERS = 15 # Added max workers
+MAX_TOKENS = 8192
+MAX_API_WORKERS = 30 # Added max workers
 
 def parse_args():
     parser = argparse.ArgumentParser()
