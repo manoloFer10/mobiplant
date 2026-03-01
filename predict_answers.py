@@ -12,11 +12,11 @@ from tqdm import tqdm
 from tenacity import retry, stop_after_attempt, wait_exponential
 from datasets import load_dataset
 
-SUPPORTED_MODELS = ['llama', 'chatgpt', 'o1-mini', 'gemini', 'claude', 'r1', 'v3']
+SUPPORTED_MODELS = ['llama', 'chatgpt', "gpt-5.2", 'o1-mini', 'gemini', 'claude', "sonnet-4.6", 'r1', 'v3']
 
 TEMPERATURE = 0.7
 MAX_TOKENS = 4096
-MAX_API_WORKERS = 5 # Added max workers
+MAX_API_WORKERS = 15 # Added max workers
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -42,14 +42,6 @@ def parse_args():
         help="[mcq-answering, long-form-answering]",
     )
     
-    # For --whos (list of strings)
-    parser.add_argument(
-        "--whos",
-        nargs="+",  # Accepts one or more values as a list
-        required=True,
-        default= 'everyone',
-        help="list of emails (provide as space-separated values)",
-    )
     # For --results_dataset_path (list of strings)
     parser.add_argument(
         "--results_dataset_path",
@@ -81,6 +73,17 @@ def parse_args():
         default= None,  
         help="from where to restart",
     )
+    parser.add_argument(
+        "--subset",
+        type=str,
+        help = "whether to subset by expert or not"
+    )
+    parser.add_argument(
+        "--with_search",
+        action="store_true",
+        required=True,
+        help='whether to use web search in mcq responses'
+    )
     args = parser.parse_args()
     return args
 
@@ -96,7 +99,8 @@ def ensure_dir(path: Path):
 def instantiate_models(keys: dict, 
                        models: list[str], 
                        max_tokens: int, 
-                       temperature: float) -> dict:
+                       temperature: float,
+                       with_search: bool) -> dict:
     if max_tokens is None:
         max_tokens = 256
     
@@ -121,6 +125,21 @@ def instantiate_models(keys: dict,
                 max_retries=2,
                 api_key=keys[model]
             )
+        if model == 'gpt-5.2':
+            replier = ChatOpenAI(
+                model='gpt-5.2',
+                temperature=1, # only value supported
+                max_tokens=max_tokens,
+                timeout=None,
+                max_retries=2,
+                api_key=keys[model],
+                reasoning={
+                    "effort":"low",
+                    "summary":"auto"
+                }
+            )
+            if with_search:
+                replier = replier.bind_tools([{"type": "web_search_preview"}])
         if model == 'o1-mini':
             replier = ChatOpenAI(
                 model="o1-mini",
@@ -139,6 +158,20 @@ def instantiate_models(keys: dict,
                 timeout=None,
                 api_key=keys[model]
             )
+        if model == 'sonnet-4.6':
+            replier = ChatAnthropic(
+                model='claude-sonnet-4-6',
+                temperature=1, # only param supported
+                max_tokens=max_tokens,
+                max_retries=2,
+                timeout=None,
+                api_key=keys[model],
+                thinking={"type":"adaptive"}
+            )
+            if with_search:
+                replier = replier.bind_tools([
+                    {"type": "web_search_20260209", "name": "web_search", "max_uses": 3}
+                ])
         if model == 'llama':
             replier = ChatOpenAI(
                 model="llama3.1-405b",
@@ -245,9 +278,20 @@ def generateAnswers_long(df: pd.DataFrame,
         raw_model_answer_content = "N/A"
         try:
             raw_model_response_obj = generate_answer_with_retry(chat_model_instance, current_prompt_obj)
-            if hasattr(raw_model_response_obj, 'content'):
+            if hasattr(raw_model_response_obj, 'content_blocks'):
+                model_answer = ""
+                for block in raw_model_response_obj.content_blocks:
+                    if block["type"] == "reasoning":
+                        model_answer+=f"REASONING: {block['reasoning']}\n"
+                    elif block["type"] == "web_search_call":
+                        model_answer+=f"SEARCHED: {block['query']}\n"
+                    elif block["type"] == "web_search_result":
+                        model_answer+=f"SOURCES: {block['urls']}\n"
+                    elif block["type"] == "text":
+                        model_answer+=f"TEXT: {block['text']}\n"
+            elif hasattr(raw_model_response_obj, 'content'):
                 raw_model_answer_content = raw_model_response_obj.content
-            model_answer = parser_instance.invoke(raw_model_response_obj)
+                model_answer = parser_instance.invoke(raw_model_response_obj)
             return model_answer, None, model_name_log 
         except Exception as e:
             return raw_model_answer_content, e, model_name_log
@@ -291,6 +335,29 @@ def generateAnswers_long(df: pd.DataFrame,
     return df
 
 
+def _format_block(block):
+    block_type = block.get('type')
+    if block_type == 'reasoning':
+        string = f'<REASONING>{block.get("reasoning")}</REASONING>'
+    if block_type == 'server_tool_result':
+        outputs=block.get('output')
+        if isinstance(outputs, list):
+            urls = [output.get('url') for output in outputs]
+            string = "\n".join([f'<URL>{url}</URL>' for url in urls])
+        else:
+            urls = []
+            string = "\n"
+    if block_type == 'text':
+        annotations = block.get('annotations')
+        if isinstance(annotations,list):
+            urls = [annotation.get('url') for annotation in annotations]
+            string = "\n".join([f'<URL>{url}</URL>' for url in urls])
+        else:
+            urls = []
+            string = "\n"
+    return string
+
+
 def generateAnswers_mcq(df: pd.DataFrame, 
                         models: list[str], 
                         max_tokens: int, 
@@ -298,7 +365,8 @@ def generateAnswers_mcq(df: pd.DataFrame,
                         style: str,
                         restart_from: int,
                         answer_extractor,
-                        output_folder):
+                        output_folder,
+                        with_search):
 
     output_path = Path(output_folder)
 
@@ -312,7 +380,8 @@ def generateAnswers_mcq(df: pd.DataFrame,
         get_keys(), 
         models, 
         max_tokens=max_tokens, 
-        temperature=TEMPERATURE
+        temperature=TEMPERATURE,
+        with_search=with_search
     )
 
     BASE_PROMPT = """Question:\n{question}\n\nOptions:\n{options}\nAnswer:"""
@@ -321,12 +390,19 @@ def generateAnswers_mcq(df: pd.DataFrame,
         raw_response_content_for_error = "N/A"
         try:
             response_obj = chat_model_instance.invoke(current_api_prompt_obj)
-            if hasattr(response_obj, 'content'):
-                raw_response_content_for_error = response_obj.content
-            
-            model_answer_text = parser_instance.invoke(response_obj)
+            if hasattr(response_obj, 'content_blocks'):
+                CoT_context = "\n".join(
+                    _format_block(block)
+                    for block in response_obj.content_blocks
+                    if block.get("type") in('server_tool_result', 'reasoning', 'text')
+                )  # reasoning usage and web searches
+                model_answer_text = parser_instance.invoke(response_obj)
+            else:
+                model_answer_text = parser_instance.invoke(response_obj)
+                CoT_context = model_answer_text
+
             extracted_answer = answer_extractor_func(model_answer_text)
-            return extracted_answer, model_answer_text, None, model_name_log 
+            return extracted_answer, CoT_context, None, model_name_log 
         except Exception as e:
             return None, raw_response_content_for_error, e, model_name_log
 
@@ -361,7 +437,10 @@ def generateAnswers_mcq(df: pd.DataFrame,
                     df.at[index, f'{style}_reasoning_by_' + model_name_res] = f"ERROR: {str(error)} - Raw: {model_answer_text_or_raw_on_error}"
                 else:
                     df.at[index, f'{style}_election_by_' + model_name_res] = extracted_answer
-                    df.at[index, f'{style}_reasoning_by_' + model_name_res] = model_answer_text_or_raw_on_error
+                    reasoning_value = model_answer_text_or_raw_on_error
+                    if isinstance(reasoning_value, list):
+                        reasoning_value = json.dumps(reasoning_value)
+                    df.at[index, f'{style}_reasoning_by_' + model_name_res] = reasoning_value
         
             if index % 50 == 0 or index == len(df) -1 :
                 save_results_to_json(
@@ -374,18 +453,21 @@ def generateAnswers_mcq(df: pd.DataFrame,
     return df
 
 def filter_data_by_settings(data_path, 
-                            email_list, 
                             num_samples, 
                             restart_from, 
-                            restart_path):
+                            restart_path,
+                            subset):
     data = load_dataset(data_path)['train'].to_pandas() 
     
     if num_samples != 'all':
         data = data.sample(n=int(num_samples))
-    
-    if not (len(email_list) == 1 and email_list[0] == 'everyone'):
-        data = data[data['email'].isin(email_list)]
-    
+
+    if subset:
+        if subset == 'expert':
+            data = data[data['is_expert']==True]
+        if subset == 'synthetic':
+            data = data[data['is_expert']==False]
+
     if restart_from:
         restart_from = int(restart_from)
         if restart_path is None:
@@ -415,11 +497,11 @@ def save_results_to_json(data: pd.DataFrame, setting, models, output_folder):
 def run_answer_prediction(args):
 
     data = filter_data_by_settings(
-        args.data_path,
-        args.whos,
-        args.num_samples,
-        args.restart_from,
-        args.restart_path
+        data_path=args.data_path,
+        num_samples=args.num_samples,
+        restart_from=args.restart_from,
+        restart_path=args.restart_path,
+        subset=args.subset
     )
     
     results_path = Path(args.results_dataset_path)
@@ -441,7 +523,8 @@ def run_answer_prediction(args):
                                           style = args.evaluation_style,
                                           restart_from=restart_from,
                                           answer_extractor= format_answer_direct,
-                                          output_folder=args.results_dataset_path)
+                                          output_folder=args.results_dataset_path,
+                                          with_search=args.with_search)
         elif args.evaluation_style == 'CoT':
             cot_system_message = 'The following is a multiple-choice question. Think step by step and then provide your FINAL answer between the tags <ANSWER> X </ANSWER> where X is ONLY the correct letter of your choice. Do not write additional text between the tags.'
             answers = generateAnswers_mcq(data,  
@@ -451,7 +534,8 @@ def run_answer_prediction(args):
                                           style = args.evaluation_style,
                                           restart_from=restart_from,
                                           answer_extractor= extract_answer_from_tags,
-                                          output_folder=args.results_dataset_path)
+                                          output_folder=args.results_dataset_path,
+                                          with_search=args.with_search)
         else: 
             raise ValueError(f'MCQ: Unexpected evaluation_style value: {args.evaluation_style}')
     elif args.setting == 'long-form-answering':
@@ -460,7 +544,7 @@ def run_answer_prediction(args):
         raise ValueError(f'unexpected value {args.setting} for an inference setting')
 
     #save answers
-    save_results_to_json(answers, args.setting + f'_{args.evaluation_style}', args.models, Path(args.results_dataset_path))
+    save_results_to_json(answers, args.setting + f'_{args.evaluation_style}', args.models, results_path)
 
 
 def main():

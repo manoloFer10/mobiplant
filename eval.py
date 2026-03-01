@@ -12,7 +12,6 @@ from eval_utils import (
     perform_descriptive_statistics,
     perform_statistics_plots,
     perform_automatic_plots,
-    perform_experiments
 )
 
 def parse_args():
@@ -60,8 +59,6 @@ def run_evaluation(results, style, output_folder):
         perform_descriptive_statistics(results, output_folder)
     if style == 'statistics-plotting':
         perform_statistics_plots(results, output_folder)
-    if style == 'experiments':
-        perform_experiments(results, output_folder)
     if style == 'automatic-plotting':
         perform_automatic_plots(results, output_folder)
 

@@ -34,6 +34,8 @@ def perform_metrics(df_dataset, output_folder):
         'claude': 'Claude',
         'chatgpt': 'GPT-4o',
         'o1-mini': 'O1-mini',
+        'gpt-5.2': 'GPT-5.2',
+        'sonnet-4.6':'Sonnet 4.6',
         'v3': 'DeepSeek V3',
         'r1': 'DeepSeek R1'
     }
