@@ -1,14 +1,7 @@
-import argparse
-import json
-import re
-import os
-import pandas as pd
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor # Added import
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
-from langchain_core.output_parsers import StrOutputParser
+
 
 
 SUPPORTED_MODELS = ['llama', 'chatgpt', "gpt-5.2", 'o1-mini', 'gemini', 'claude', "sonnet-4.6", 'r1', 'v3']
@@ -57,7 +50,7 @@ def instantiate_models(keys: dict,
                 }
             )
             if with_search:
-                replier = replier.bind_tools([{"type": "web_search_preview"}])
+                replier = replier.bind_tools([{"type": "web_search"}])
         if model == 'o1-mini':
             replier = ChatOpenAI(
                 model="o1-mini",
