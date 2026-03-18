@@ -136,10 +136,11 @@ def filter_data_by_settings(data_path,
         data = data.sample(n=int(num_samples))
 
     if subset:
-        if subset == 'expert':
-            data = data[data['is_expert']==True]
-        if subset == 'synthetic':
-            data = data[data['is_expert']==False]
+        if 'is_expert' in data.columns:
+            if subset == 'expert':
+                data = data[data['is_expert']==True]
+            if subset == 'synthetic':
+                data = data[data['is_expert']==False]
 
     if restart_from:
         restart_from = int(restart_from)
