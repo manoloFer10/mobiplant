@@ -1,4 +1,3 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
@@ -18,6 +17,12 @@ def instantiate_models(keys: dict,
     chat_models = {}
     for model in models:
         if model == 'gemini':
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+            except ImportError as exc:
+                raise ImportError(
+                    "Model 'gemini' requires langchain-google-genai. Install it with: pip install langchain-google-genai"
+                ) from exc
             replier = ChatGoogleGenerativeAI(
                 model="gemini-1.5-pro",
                 temperature=temperature,
@@ -71,18 +76,18 @@ def instantiate_models(keys: dict,
             )
         if model == 'sonnet-4.6':
             replier = ChatAnthropic(
-                model='claude-sonnet-4-6',
+                model='claude-opus-4-5-20251101',
                 temperature=1, # only param supported
-                max_tokens=max_tokens,
+                max_tokens=max_tokens*1.5,
                 max_retries=2,
                 timeout=None,
                 api_key=keys[model],
-                thinking={"type": "adaptive"},
-                output_config={"effort": "low"}
+                thinking={"type": "enabled", "budget_tokens": int(max_tokens * 0.75)},
+                #model_kwargs={"output_config": {"effort": "low"}},
             )
             if with_search:
                 replier = replier.bind_tools([
-                    {"type": "web_search_20260209", "name": "web_search", "max_uses": 3}
+                    {"type": "web_search_20250305", "name": "web_search", "max_uses": 1}
                 ])
         if model == 'llama':
             replier = ChatOpenAI(
