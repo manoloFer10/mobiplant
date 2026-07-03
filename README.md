@@ -16,7 +16,7 @@ Any OS with a working Conda + Python 3.11 toolchain should work, since all close
 
 ### Software dependencies
 - **Python 3.11.11** (pinned in `environment.yml`).
-- Full pinned lists are in `environment.yml` and `requirements.txt`. Key packages:
+- The full pinned list is in `environment.yml`. Key packages:
   - Dataset loading: `datasets==3.6.0`, `huggingface-hub==0.32.4`
   - Model clients: `openai==1.76.0`, `anthropic==0.50.0`, `google-genai==1.12.1`
   - LangChain wrappers: `langchain-core==0.3.56`, `langchain-openai==0.3.14`, `langchain-anthropic==0.3.12`, `langchain-google-genai==2.1.3`
@@ -42,10 +42,10 @@ Any OS with a working Conda + Python 3.11 toolchain should work, since all close
    ```sh
    conda env create -f environment.yml
    conda activate mobiplant
-   python -m pip install -r requirements.txt
    ```
+   This single command installs the entire dependency set (conda packages + the pinned `pip` section, including `torch` and `transformers`).
 
-   > **Note on `torch` / `transformers`.** Both are pinned in `environment.yml` (`torch==2.11.0`, `transformers==4.38.2`) and installed by `conda env create` — but they are **not** in `requirements.txt`. `benchmarking_utils/answering.py` imports `torch` at module load, so it is required for **every** run, not just `ChatNT`. `transformers==4.38.2` is intentionally old: it is the version compatible with ChatNT's `trust_remote_code` model definition.
+   > **Note on `torch` / `transformers`.** Both are pinned in `environment.yml` (`torch==2.11.0`, `transformers==4.38.2`) and installed by `conda env create`. `benchmarking_utils/answering.py` imports `torch` at module load, so it is required for **every** run, not just `ChatNT`. `transformers==4.38.2` is intentionally old: it is the version compatible with ChatNT's `trust_remote_code` model definition.
    >
    > For the local `ChatNT` model you need a **CUDA-capable** torch build. The plain `torch==2.11.0` above resolves the default PyPI wheel; the tested GPU build was `torch==2.11.0+cu130`, installable from the PyTorch index:
    > ```sh
@@ -73,25 +73,7 @@ Any OS with a working Conda + Python 3.11 toolchain should work, since all close
 
      (You can set only the subset of keys for the models you intend to run.)
 
-## Demo
 
-A minimal end-to-end run on a small random subset (5 questions) using an API model. This exercises the full pipeline — dataset download → inference → JSON output — without a large API bill.
-
-```sh
-python predict_answers.py \
-  --data_path manufernandezbur/mobiplant \
-  --models chatgpt \
-  --setting mcq-answering \
-  --evaluation_style CoT \
-  --num_samples 5 \
-  --results_dataset_path demo_results
-```
-
-**Expected output:** a JSON file at
-`demo_results/inference/mcq-answering_CoT_chatgpt_results.json`,
-with one record per question containing the model's chain-of-thought, the extracted answer as a 0-indexed integer (`A`→0, `B`→1, `C`→2), and the ground-truth label. A `tqdm` progress bar is printed to the console; intermediate checkpoints are written under `demo_results/temp/`.
-
-**Expected run time:** ~1–2 min for 5 questions on a normal desktop. Runtime is dominated by API latency (requests are issued sequentially, `MAX_API_WORKERS = 1`); the local machine is idle while waiting on the provider.
 
 ## Usage
 
@@ -130,6 +112,26 @@ python predict_answers.py \
   --num_samples all \
   --results_dataset_path where_to_save_results
 ```
+
+## Demo
+
+A minimal end-to-end run on a small random subset (5 questions) using an API model. This exercises the full pipeline — dataset download → inference → JSON output — without a large API bill.
+
+```sh
+python predict_answers.py \
+  --data_path manufernandezbur/mobiplant \
+  --models chatgpt \
+  --setting mcq-answering \
+  --evaluation_style CoT \
+  --num_samples 5 \
+  --results_dataset_path demo_results
+```
+
+**Expected output:** a JSON file at
+`demo_results/inference/mcq-answering_CoT_chatgpt_results.json`,
+with one record per question containing the model's chain-of-thought, the extracted answer as a 0-indexed integer (`A`→0, `B`→1, `C`→2), and the ground-truth label. A `tqdm` progress bar is printed to the console; intermediate checkpoints are written under `demo_results/temp/`.
+
+**Expected run time:** ~1–2 min for 5 questions on a normal desktop. Runtime is dominated by API latency (requests are issued sequentially, `MAX_API_WORKERS = 1`); the local machine is idle while waiting on the provider.
 
 ## Evaluation and Plotting
 ### Example: Quick metrics from previous results
