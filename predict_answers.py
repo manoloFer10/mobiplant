@@ -1,8 +1,10 @@
 import argparse
+import os
 import re
 import pandas as pd
 from pathlib import Path
 from datasets import load_dataset
+from huggingface_hub import login
 
 from benchmarking_utils.answering import (
     MAX_TOKENS,
@@ -72,7 +74,7 @@ def parse_args():
     parser.add_argument(
         "--with_search",
         action="store_true",
-        required=True,
+        default=False,
         help='whether to use web search in mcq responses'
     )
     args = parser.parse_args()
@@ -212,6 +214,11 @@ def run_answer_prediction(args):
 
 
 def main():
+    # Login to Hugging Face if HF_TOKEN is provided
+    hf_token = os.environ.get('HF_TOKEN')
+    if hf_token:
+        login(token=hf_token)
+    
     args = parse_args()
     run_answer_prediction(args)
 

@@ -3,7 +3,7 @@ from langchain_openai import ChatOpenAI
 
 
 
-SUPPORTED_MODELS = ['llama', 'chatgpt', "gpt-5.2", 'o1-mini', 'gemini', 'claude', "sonnet-4.6", 'r1', 'v3']
+SUPPORTED_MODELS = ['llama', 'chatgpt', "gpt-5.2", 'o1-mini', 'gemini', 'claude', "sonnet-4.6", 'r1', 'v3', 'ChatNT']
 
 
 def instantiate_models(keys: dict, 
@@ -120,6 +120,17 @@ def instantiate_models(keys: dict,
                 max_retries=2,
                 reasoning_effort ='low'
             )
+        if model == 'ChatNT':
+            from transformers import pipeline
+            import torch
+            pipe = pipeline(
+                model="InstaDeepAI/ChatNT", 
+                trust_remote_code=True, 
+                device='cuda', 
+                torch_dtype=torch.bfloat16
+            )
+            pipe.max_tokens = max_tokens
+            replier = pipe
         if model not in SUPPORTED_MODELS:
             raise NameError(f'Model:{model} not implemented for answering DB.')
         chat_models[model] = replier
