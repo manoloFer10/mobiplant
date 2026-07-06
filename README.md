@@ -43,10 +43,7 @@ Any OS with a working Conda + Python 3.11 toolchain should work, since all close
    conda env create -f environment.yml
    conda activate mobiplant
    ```
-   This single command installs the entire dependency set (conda packages + the pinned `pip` section, including `torch` and `transformers`).
 
-   > **Note on `torch` / `transformers`.** Both are pinned in `environment.yml` (`torch==2.11.0`, `transformers==4.38.2`) and installed by `conda env create`. `benchmarking_utils/answering.py` imports `torch` at module load, so it is required for **every** run, not just `ChatNT`. `transformers==4.38.2` is intentionally old: it is the version compatible with ChatNT's `trust_remote_code` model definition.
-   >
    > For the local `ChatNT` model you need a **CUDA-capable** torch build. The plain `torch==2.11.0` above resolves the default PyPI wheel; the tested GPU build was `torch==2.11.0+cu130`, installable from the PyTorch index:
    > ```sh
    > pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu130
