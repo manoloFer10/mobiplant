@@ -113,6 +113,31 @@ python predict_answers.py \
   --results_dataset_path where_to_save_results
 ```
 
+### Example: Reproducing the ChatNT DNA-sequence benchmark
+
+The ChatNT comparison uses a separate runner, `dna_llm_benchmarking/run_dna_llm_mobi_benchmarking.py`. It runs a chat LLM on the plant DNA-sequence tasks from the ChatNT benchmark. It reuses the same `tokens.json` keys and `SUPPORTED_MODELS` as `predict_answers.py`.
+
+```sh
+python dna_llm_benchmarking/run_dna_llm_mobi_benchmarking.py \
+  --model gpt-5.2 \
+  --results_dataset_path dna_llm_results/gpt-5.2
+```
+
+By default this loads the `dna_llm` config of the Hugging Face dataset (equivalent to `--data_path manufernandezbur/mobiplant --config dna_llm`). The paper benchmarks `gpt-5.2` and `sonnet-4.6`, but any name in `SUPPORTED_MODELS` works.
+
+- `--model` *(required)*: a **single** model name from `SUPPORTED_MODELS`.
+- `--results_dataset_path` *(required)*: output directory (created if missing).
+- `--data_path`: HF dataset repo id **or** a local JSON path (a path that exists locally is auto-detected and read directly). Default `manufernandezbur/mobiplant`.
+- `--config`: HF dataset config/subset name; default `dna_llm`. Ignored when `--data_path` is a local file.
+- `--evaluation_style`: default `CoT`.
+- `--num_samples`: `all` (default) or an integer (takes the first N rows).
+- `--max_api_workers`: number of parallel API requests; default `30` (this runner is multi-threaded, unlike the sequential `predict_answers.py`).
+- `--checkpoint_every`: write a checkpoint every N samples; default `50`.
+- `--with_search` *(optional flag)*: enable web-search tool use for models that support it.
+
+**Output:** `dna_llm_results/gpt-5.2/inference/dna-benchmarking_CoT_gpt-5.2_results.json` (with periodic checkpoints under `.../temp/`). Each record keeps the original `question` / `answer` / `reference_dataset` / `task_type` and adds `CoT_extracted_by_gpt-5.2`, `CoT_reasoning_by_gpt-5.2`, and `CoT_status_by_gpt-5.2`. Re-running with the same `--results_dataset_path` is **idempotent**: already-answered samples are detected and skipped, so interrupted runs simply resume.
+
+
 ## Demo
 
 A minimal end-to-end run on a small random subset (5 questions) using an API model. This exercises the full pipeline — dataset download → inference → JSON output — without a large API bill.
